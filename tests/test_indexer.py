@@ -13,7 +13,8 @@ class TestLocalIndexerAndSearch(unittest.TestCase):
         self.assertGreaterEqual(files_indexed, 3)
         self.assertGreaterEqual(len(indexer.chunks), 3)
 
-        engine = LocalSearchEngine(indexer=indexer)
+        from nanoprune.engine.pruner import NanoPruner
+        engine = LocalSearchEngine(indexer=indexer, pruner=NanoPruner(model_path=None))
         res = engine.search("Allergie pénicilline Dupont")
 
         self.assertGreater(res["matches_retained"], 0)

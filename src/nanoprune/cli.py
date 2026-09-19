@@ -12,7 +12,7 @@ def main():
         prog="nanoprune",
         description="NanoPrune: The 2.8MB System One Calibrated Decision & RAG Pruner.",
     )
-    parser.add_argument("--version", action="version", version="nanoprune 0.1.0")
+    parser.add_argument("--version", action="version", version="nanoprune 0.3.0")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -33,6 +33,15 @@ def main():
     prune_parser.add_argument("query", type=str, help="Requête")
     prune_parser.add_argument("texts", nargs="+", help="Textes candidats à évaluer")
     prune_parser.add_argument("--threshold", type=float, default=0.70, help="Seuil d'élagage")
+
+    # Command: choice (Primitive 2)
+    choice_parser = subparsers.add_parser("choice", help="Sélectionner une catégorie parmi des options (Primitive Choice)")
+    choice_parser.add_argument("text", type=str, help="Texte à analyser")
+    choice_parser.add_argument("--options", nargs="+", default=["human_rights", "business_tax", "public_admin", "civil_family"], help="Options")
+
+    # Command: score (Primitive 3)
+    score_parser = subparsers.add_parser("score", help="Évaluer le niveau de complexité ou de risque (Primitive Score)")
+    score_parser.add_argument("text", type=str, help="Texte à noter sur barème ordinal (0 à 4)")
 
     args = parser.parse_args()
 
@@ -58,6 +67,17 @@ def main():
         print(f"Conservés {len(results)}/{len(args.texts)} candidats (seuil >= {args.threshold}):")
         for text, score in results:
             print(f" - [{round(score * 100, 1)}%] {text[:80]}...")
+
+    elif args.command == "choice":
+        pruner = NanoPruner.load()
+        idx, opt, conf = pruner.choice(args.text, args.options)
+        print(f"Catégorie sélectionnée : {opt} (Index {idx})")
+        print(f"Confiance calibrée : {conf * 100:.1f}%")
+
+    elif args.command == "score":
+        pruner = NanoPruner.load()
+        val = pruner.score_rubric(args.text)
+        print(f"Score de complexité / portée : {val:.2f} / 4.0")
 
     else:
         parser.print_help()

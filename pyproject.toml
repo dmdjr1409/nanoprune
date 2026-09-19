@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanoprune"
-version = "0.1.0"
+version = "0.3.0"
 description = "The 2.8MB System One Calibrated Decision & RAG Pruner. Zero-cost, zero-hallucination neural retrieval in 15ms on CPU."
 readme = "README.md"
 authors = [

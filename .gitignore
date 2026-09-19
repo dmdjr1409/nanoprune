@@ -35,8 +35,10 @@ htmlcov/
 # Model checkpoints & cache (large binaries)
 *.pt
 *.bin
+*.onnx.data
 weights/
 cache/
+data/
 
 # OS / Editor
 .DS_Store

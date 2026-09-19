@@ -28,10 +28,12 @@ if HAS_TORCH:
             max_seq_len: int = 256,
             dropout: float = 0.1,
             temperature: float = 1.0,
+            num_choices: int = 4,
         ):
             super().__init__()
             self.d_model = d_model
             self.max_seq_len = max_seq_len
+            self.num_choices = num_choices
             self.temperature = nn.Parameter(torch.tensor([temperature]), requires_grad=False)
 
             self.token_embeddings = nn.Embedding(vocab_size, d_model, padding_idx=0)
@@ -50,12 +52,45 @@ if HAS_TORCH:
             )
             self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
 
-            self.head = nn.Sequential(
+            # Primitive 1: Calibrated relevance / prune head
+            self.relevance_head = nn.Sequential(
                 nn.Linear(d_model, 64),
                 nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Linear(64, 1),
             )
+            self.head = self.relevance_head
+
+            # Primitive 2: Multi-class choice head
+            self.choice_head = nn.Sequential(
+                nn.Linear(d_model, 64),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(64, num_choices),
+            )
+
+            # Primitive 3: Continuous rubric score head
+            self.score_head = nn.Sequential(
+                nn.Linear(d_model, 64),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(64, 1),
+            )
+
+        def _encode(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+            batch_size, seq_len = input_ids.size()
+            positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, seq_len)
+
+            x = self.token_embeddings(input_ids) * math.sqrt(self.d_model)
+            x = x + self.position_embeddings(positions)
+            x = self.layer_norm(x)
+            x = self.dropout(x)
+
+            padding_mask = None
+            if attention_mask is not None:
+                padding_mask = attention_mask == 0
+
+            return self.encoder(x, src_key_padding_mask=padding_mask)
 
         def forward(
             self,
@@ -67,33 +102,52 @@ if HAS_TORCH:
                 input_ids: Tensor of shape (batch_size, seq_len)
                 attention_mask: Tensor of shape (batch_size, seq_len), 1 for valid, 0 for pad
             Returns:
-                logits: Raw logits (batch_size, 1)
-                probabilities: Calibrated probabilities (batch_size, 1)
+                logits: Raw relevance logits (batch_size, 1)
+                probabilities: Calibrated relevance probabilities (batch_size, 1)
             """
-            batch_size, seq_len = input_ids.size()
-            positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, seq_len)
-
-            x = self.token_embeddings(input_ids) * math.sqrt(self.d_model)
-            x = x + self.position_embeddings(positions)
-            x = self.layer_norm(x)
-            x = self.dropout(x)
-
-            # PyTorch TransformerEncoder takes src_key_padding_mask where True indicates ignore
-            padding_mask = None
-            if attention_mask is not None:
-                padding_mask = attention_mask == 0
-
-            encoded = self.encoder(x, src_key_padding_mask=padding_mask)
-
-            # Pool at [CLS] token (index 0)
+            encoded = self._encode(input_ids, attention_mask)
             cls_rep = encoded[:, 0, :]
-            logits = self.head(cls_rep)
+            logits = self.relevance_head(cls_rep)
 
-            # Temperature-scaled calibrated sigmoid
             scaled_logits = logits / torch.clamp(self.temperature, min=1e-3)
             probabilities = torch.sigmoid(scaled_logits)
 
             return logits, probabilities
+
+        def forward_all(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+        ) -> dict:
+            """
+            Multi-primitive forward pass returning:
+            - relevance_logits: (batch_size, 1)
+            - relevance_probs: (batch_size, 1)
+            - choice_logits: (batch_size, num_choices)
+            - choice_probs: (batch_size, num_choices)
+            - score: (batch_size, 1)
+            """
+            encoded = self._encode(input_ids, attention_mask)
+            cls_rep = encoded[:, 0, :]
+
+            # Relevance
+            rel_logits = self.relevance_head(cls_rep)
+            rel_probs = torch.sigmoid(rel_logits / torch.clamp(self.temperature, min=1e-3))
+
+            # Choice
+            choice_logits = self.choice_head(cls_rep)
+            choice_probs = F.softmax(choice_logits, dim=-1)
+
+            # Score (scaled to [0, 4])
+            score = torch.sigmoid(self.score_head(cls_rep)) * 4.0
+
+            return {
+                "relevance_logits": rel_logits,
+                "relevance_probs": rel_probs,
+                "choice_logits": choice_logits,
+                "choice_probs": choice_probs,
+                "score": score,
+            }
 
         def count_parameters(self) -> int:
             return sum(p.numel() for p in self.parameters() if p.requires_grad)

@@ -43,8 +43,16 @@ class NanoPruner:
             try:
                 import torch
                 from ..core.model import NanoPruneModel
-                model = NanoPruneModel()
-                model.load_state_dict(torch.load(str(path), map_location="cpu"))
+                state_dict = torch.load(str(path), map_location="cpu")
+                # Handle legacy head naming
+                if "head.0.weight" in state_dict and "relevance_head.0.weight" not in state_dict:
+                    state_dict["relevance_head.0.weight"] = state_dict["head.0.weight"]
+                    state_dict["relevance_head.0.bias"] = state_dict["head.0.bias"]
+                    state_dict["relevance_head.3.weight"] = state_dict["head.3.weight"]
+                    state_dict["relevance_head.3.bias"] = state_dict["head.3.bias"]
+                vocab_size = state_dict.get("token_embeddings.weight", torch.zeros(4096, 128)).shape[0]
+                model = NanoPruneModel(vocab_size=vocab_size)
+                model.load_state_dict(state_dict, strict=False)
                 model.eval()
                 self.torch_model = model
             except Exception as e:
@@ -54,25 +62,41 @@ class NanoPruner:
     def load(cls, model_path: Optional[Union[str, Path]] = None, threshold: float = 0.70) -> "NanoPruner":
         if model_path is None:
             pkg_root = Path(__file__).resolve().parent.parent.parent.parent
-            pt_candidate = pkg_root / "weights" / "nanoprune-v0.1.pt"
-            onnx_candidate = pkg_root / "weights" / "nanoprune-v0.1.onnx"
-            if onnx_candidate.exists():
-                try:
-                    import onnxruntime
-                    model_path = onnx_candidate
-                except ImportError:
-                    if pt_candidate.exists():
+            weights_dir = pkg_root / "weights"
+
+            # Check candidates in order of preference
+            onnx_candidates = [
+                weights_dir / "nanoprune-v0.3.onnx",
+                weights_dir / "nanoprune-legal-v0.2.onnx",
+                weights_dir / "nanoprune-v0.1.onnx",
+            ]
+            pt_candidates = [
+                weights_dir / "nanoprune-v0.3.pt",
+                weights_dir / "nanoprune-legal-v0.2.pt",
+                weights_dir / "nanoprune-v0.1.pt",
+            ]
+
+            # Try ONNX first
+            for cand in onnx_candidates:
+                if cand.exists():
+                    try:
+                        import onnxruntime
+                        model_path = cand
+                        break
+                    except ImportError:
+                        pass
+
+            # Try PyTorch if ONNX not loaded
+            if model_path is None:
+                for cand in pt_candidates:
+                    if cand.exists():
                         try:
                             import torch
-                            model_path = pt_candidate
+                            model_path = cand
+                            break
                         except ImportError:
                             pass
-            elif pt_candidate.exists():
-                try:
-                    import torch
-                    model_path = pt_candidate
-                except ImportError:
-                    pass
+
         return cls(model_path=model_path, threshold=threshold)
 
     def score_pair(self, query: str, context: str) -> float:
@@ -133,6 +157,44 @@ class NanoPruner:
                 _, probs = self.torch_model(t_ids, t_mask)
                 scores.extend(probs.squeeze(-1).tolist())
         return scores
+
+    def choice(self, context: str, options: List[str]) -> Tuple[int, str, float]:
+        """
+        Primitive 2: Select the best option from a list with calibrated probability.
+        """
+        if not options:
+            raise ValueError("options list cannot be empty")
+
+        if self.torch_model is not None and hasattr(self.torch_model, "forward_all"):
+            import torch
+            ids, mask = self.tokenizer.encode_pair("Category selection", context, max_length=256)
+            t_ids = torch.tensor([ids], dtype=torch.long)
+            t_mask = torch.tensor([mask], dtype=torch.long)
+            with torch.no_grad():
+                res = self.torch_model.forward_all(t_ids, t_mask)
+                probs = res["choice_probs"].squeeze(0).cpu().numpy()
+                k = min(len(options), len(probs))
+                sub_probs = probs[:k] / max(1e-6, probs[:k].sum())
+                best_idx = int(sub_probs.argmax())
+                conf = float(sub_probs[best_idx])
+                return best_idx, options[best_idx], conf
+
+        return 0, options[0], 0.50
+
+    def score_rubric(self, context: str) -> float:
+        """
+        Primitive 3: Rate text on continuous complexity or risk scale [0.0, 4.0].
+        """
+        if self.torch_model is not None and hasattr(self.torch_model, "forward_all"):
+            import torch
+            ids, mask = self.tokenizer.encode_pair("Score evaluation", context, max_length=256)
+            t_ids = torch.tensor([ids], dtype=torch.long)
+            t_mask = torch.tensor([mask], dtype=torch.long)
+            with torch.no_grad():
+                res = self.torch_model.forward_all(t_ids, t_mask)
+                return float(res["score"].squeeze().item())
+
+        return min(4.0, max(0.0, len(context) / 200.0))
 
     def _score_calibrated_heuristic(self, query: str, candidates: List[str]) -> List[float]:
         """

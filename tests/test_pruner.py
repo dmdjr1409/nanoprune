@@ -3,7 +3,7 @@ from nanoprune.engine.pruner import NanoPruner
 
 class TestNanoPruner(unittest.TestCase):
     def test_pruner_heuristic_scoring(self):
-        pruner = NanoPruner.load()
+        pruner = NanoPruner(model_path=None)
         query = "Allergie pénicilline"
         c1 = "Le patient présente une allergie sévère aux pénicillines."
         c2 = "Le patient n'a aucune allergie connue."
@@ -15,7 +15,7 @@ class TestNanoPruner(unittest.TestCase):
         self.assertTrue(0.0 <= scores[0] <= 1.0)
 
     def test_pruner_prune_threshold(self):
-        pruner = NanoPruner.load(threshold=0.60)
+        pruner = NanoPruner(model_path=None, threshold=0.60)
         query = "Allergie pénicilline"
         candidates = [
             "Patient allergique à la pénicilline",
