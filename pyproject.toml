@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanoprune"
+version = "0.1.0"
+description = "The 2.8MB System One Calibrated Decision & RAG Pruner. Zero-cost, zero-hallucination neural retrieval in 15ms on CPU."
+readme = "README.md"
+authors = [
+    { name = "Junior Diomande", email = "diomandejunior14@hotmail.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.9"
+keywords = ["rag", "reranker", "system-one", "onnx", "pruner", "information-retrieval", "privacy", "local-ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Legal Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Text Processing :: Indexing",
+]
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+onnx = [
+    "onnxruntime>=1.15.0",
+]
+train = [
+    "torch>=2.0.0",
+    "onnx>=1.14.0",
+]
+all = [
+    "onnxruntime>=1.15.0",
+    "torch>=2.0.0",
+    "onnx>=1.14.0",
+]
+
+[project.scripts]
+nanoprune = "nanoprune.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/dmdjr1409/nanoprune"
+Repository = "https://github.com/dmdjr1409/nanoprune"
+Issues = "https://github.com/dmdjr1409/nanoprune/issues"

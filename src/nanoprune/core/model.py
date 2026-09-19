@@ -1,0 +1,107 @@
+import math
+from typing import Optional, Tuple
+
+try:
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
+    torch = None
+    nn = None
+    F = None
+
+if HAS_TORCH:
+    class NanoPruneModel(nn.Module):
+        """
+        NanoPrune: 2-layer Transformer Encoder (~960k parameters)
+        Single-pass calibrated relevance scoring for RAG context pruning.
+        """
+        def __init__(
+            self,
+            vocab_size: int = 4096,
+            d_model: int = 128,
+            n_heads: int = 4,
+            d_ff: int = 512,
+            n_layers: int = 2,
+            max_seq_len: int = 256,
+            dropout: float = 0.1,
+            temperature: float = 1.0,
+        ):
+            super().__init__()
+            self.d_model = d_model
+            self.max_seq_len = max_seq_len
+            self.temperature = nn.Parameter(torch.tensor([temperature]), requires_grad=False)
+
+            self.token_embeddings = nn.Embedding(vocab_size, d_model, padding_idx=0)
+            self.position_embeddings = nn.Embedding(max_seq_len, d_model)
+            self.layer_norm = nn.LayerNorm(d_model)
+            self.dropout = nn.Dropout(dropout)
+
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=n_heads,
+                dim_feedforward=d_ff,
+                dropout=dropout,
+                activation="gelu",
+                batch_first=True,
+                norm_first=True,
+            )
+            self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
+
+            self.head = nn.Sequential(
+                nn.Linear(d_model, 64),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(64, 1),
+            )
+
+        def forward(
+            self,
+            input_ids: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+            """
+            Args:
+                input_ids: Tensor of shape (batch_size, seq_len)
+                attention_mask: Tensor of shape (batch_size, seq_len), 1 for valid, 0 for pad
+            Returns:
+                logits: Raw logits (batch_size, 1)
+                probabilities: Calibrated probabilities (batch_size, 1)
+            """
+            batch_size, seq_len = input_ids.size()
+            positions = torch.arange(0, seq_len, device=input_ids.device).unsqueeze(0).expand(batch_size, seq_len)
+
+            x = self.token_embeddings(input_ids) * math.sqrt(self.d_model)
+            x = x + self.position_embeddings(positions)
+            x = self.layer_norm(x)
+            x = self.dropout(x)
+
+            # PyTorch TransformerEncoder takes src_key_padding_mask where True indicates ignore
+            padding_mask = None
+            if attention_mask is not None:
+                padding_mask = attention_mask == 0
+
+            encoded = self.encoder(x, src_key_padding_mask=padding_mask)
+
+            # Pool at [CLS] token (index 0)
+            cls_rep = encoded[:, 0, :]
+            logits = self.head(cls_rep)
+
+            # Temperature-scaled calibrated sigmoid
+            scaled_logits = logits / torch.clamp(self.temperature, min=1e-3)
+            probabilities = torch.sigmoid(scaled_logits)
+
+            return logits, probabilities
+
+        def count_parameters(self) -> int:
+            return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+else:
+    class NanoPruneModel:
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                "PyTorch is required to initialize NanoPruneModel. "
+                "Install it with: pip install torch"
+            )
