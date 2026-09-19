@@ -50,8 +50,21 @@ class NanoPruner:
                     state_dict["relevance_head.0.bias"] = state_dict["head.0.bias"]
                     state_dict["relevance_head.3.weight"] = state_dict["head.3.weight"]
                     state_dict["relevance_head.3.bias"] = state_dict["head.3.bias"]
-                vocab_size = state_dict.get("token_embeddings.weight", torch.zeros(4096, 128)).shape[0]
-                model = NanoPruneModel(vocab_size=vocab_size)
+                emb = state_dict.get("token_embeddings.weight")
+                vocab_size = emb.shape[0] if emb is not None else 8192
+                d_model = emb.shape[1] if emb is not None else 256
+                layer_keys = [k for k in state_dict.keys() if "encoder.layers." in k and ".linear1.weight" in k]
+                n_layers = len(layer_keys) if layer_keys else 4
+                n_heads = 8 if d_model >= 256 else 4
+                d_ff = 1024 if d_model >= 256 else 512
+
+                model = NanoPruneModel(
+                    vocab_size=vocab_size,
+                    d_model=d_model,
+                    n_heads=n_heads,
+                    d_ff=d_ff,
+                    n_layers=n_layers
+                )
                 model.load_state_dict(state_dict, strict=False)
                 model.eval()
                 self.torch_model = model
@@ -66,11 +79,13 @@ class NanoPruner:
 
             # Check candidates in order of preference
             onnx_candidates = [
+                weights_dir / "nanoprune-v0.4.onnx",
                 weights_dir / "nanoprune-v0.3.onnx",
                 weights_dir / "nanoprune-legal-v0.2.onnx",
                 weights_dir / "nanoprune-v0.1.onnx",
             ]
             pt_candidates = [
+                weights_dir / "nanoprune-v0.4.pt",
                 weights_dir / "nanoprune-v0.3.pt",
                 weights_dir / "nanoprune-legal-v0.2.pt",
                 weights_dir / "nanoprune-v0.1.pt",

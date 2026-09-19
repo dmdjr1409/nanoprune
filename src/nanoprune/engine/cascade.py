@@ -1,3 +1,4 @@
+import re
 import time
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
@@ -14,8 +15,8 @@ class HybridCascadePruner:
     def __init__(
         self,
         nanoprune_model: Optional[NanoPruner] = None,
-        drop_threshold: float = 0.35,
-        keep_threshold: float = 0.75,
+        drop_threshold: float = 0.75,
+        keep_threshold: float = 0.95,
         enable_laya: bool = True,
     ):
         self.drop_threshold = drop_threshold
@@ -29,6 +30,20 @@ class HybridCascadePruner:
                 self.laya_agent = laya.load("convaiinnovations/laya")
             except Exception as e:
                 print(f"[HybridCascade] Note: Laya not loaded ({e}), falling back to single-tier.")
+
+    @staticmethod
+    def _lexical_overlap(query: str, doc: str) -> float:
+        stop = {
+            "le", "la", "les", "un", "une", "des", "du", "de", "d", "en", "pour",
+            "et", "à", "au", "aux", "par", "dans", "sur", "ce", "cette", "ces"
+        }
+        q_words = set(re.findall(r"\w+", query.lower())) - stop
+        d_words = set(re.findall(r"\w+", doc.lower())) - stop
+        if not q_words:
+            return 0.0
+        q_stems = {w[:5] for w in q_words}
+        d_stems = {w[:5] for w in d_words}
+        return len(q_stems.intersection(d_stems)) / len(q_stems)
 
     def prune_cascade(
         self,
@@ -56,14 +71,16 @@ class HybridCascadePruner:
         ambiguous_indices = []
 
         for idx, (cand, score) in enumerate(zip(candidates, tier1_scores)):
-            if score < self.drop_threshold:
-                tier1_dropped.append((cand, score, "tier1_drop"))
+            lex_ov = self._lexical_overlap(query, cand)
+            # Safe Fast Drop: zero lexical overlap AND neural score below threshold
+            if lex_ov == 0.0 and score < self.drop_threshold:
+                tier1_dropped.append((cand, score, "tier1_fast_dropped"))
             elif score >= self.keep_threshold:
                 tier1_kept.append((cand, score, "tier1_match"))
             else:
                 ambiguous_indices.append(idx)
 
-        # --- Tier 2: Laya Deep Arbitration (Only boundary cases) ---
+        # --- Tier 2: Asymmetric Semantic Arbitration (Laya + NanoPrune Rescue) ---
         t2_start = time.perf_counter()
         tier2_results = []
 
@@ -81,15 +98,21 @@ class HybridCascadePruner:
                 try:
                     res = self.laya_agent.system_one(state, questions)
                     laya_prob = float(res["answers"]["relevance"]["noul"])
-                    conf = float(res["answers"]["relevance"]["confidence"])
+                    lex_ov = self._lexical_overlap(query, cand)
 
-                    # Decision based on Laya's deep evaluation
+                    # Asymmetric Decision Logic:
+                    # 1. High confidence semantic match from Laya
                     if laya_prob >= 0.50:
-                        tier2_results.append((cand, laya_prob, "tier2_arbitrated_kept"))
+                        tier2_results.append((cand, laya_prob, "tier2_laya_kept"))
+                    # 2. Asymmetric Rescue: Laya was too conservative on strict technical terms (0.25-0.50),
+                    # but NanoPrune confirms strong grounded topical anchor (np_score >= 0.70 & lex_ov >= 0.20)
+                    elif 0.25 <= laya_prob < 0.50 and lex_ov >= 0.20 and np_score >= 0.70:
+                        rescued_score = round(0.50 * laya_prob + 0.50 * np_score, 4)
+                        tier2_results.append((cand, rescued_score, "tier2_rescued_by_nanoprune"))
+                    # 3. Reject: Hard negative traps (Laya < 0.25) or cross-domain noise
                     else:
-                        tier1_dropped.append((cand, laya_prob, "tier2_arbitrated_dropped"))
+                        tier1_dropped.append((cand, laya_prob, "tier2_laya_dropped"))
                 except Exception:
-                    # Fallback to NanoPrune's score if Laya forward pass errors
                     if np_score >= 0.50:
                         tier2_results.append((cand, np_score, "tier1_fallback_kept"))
                     else:

@@ -20,11 +20,11 @@ if HAS_TORCH:
         """
         def __init__(
             self,
-            vocab_size: int = 4096,
-            d_model: int = 128,
-            n_heads: int = 4,
-            d_ff: int = 512,
-            n_layers: int = 2,
+            vocab_size: int = 8192,
+            d_model: int = 256,
+            n_heads: int = 8,
+            d_ff: int = 1024,
+            n_layers: int = 4,
             max_seq_len: int = 256,
             dropout: float = 0.1,
             temperature: float = 1.0,
@@ -54,27 +54,27 @@ if HAS_TORCH:
 
             # Primitive 1: Calibrated relevance / prune head
             self.relevance_head = nn.Sequential(
-                nn.Linear(d_model, 64),
+                nn.Linear(d_model, 128),
                 nn.GELU(),
                 nn.Dropout(dropout),
-                nn.Linear(64, 1),
+                nn.Linear(128, 1),
             )
             self.head = self.relevance_head
 
             # Primitive 2: Multi-class choice head
             self.choice_head = nn.Sequential(
-                nn.Linear(d_model, 64),
+                nn.Linear(d_model, 128),
                 nn.GELU(),
                 nn.Dropout(dropout),
-                nn.Linear(64, num_choices),
+                nn.Linear(128, num_choices),
             )
 
             # Primitive 3: Continuous rubric score head
             self.score_head = nn.Sequential(
-                nn.Linear(d_model, 64),
+                nn.Linear(d_model, 128),
                 nn.GELU(),
                 nn.Dropout(dropout),
-                nn.Linear(64, 1),
+                nn.Linear(128, 1),
             )
 
         def _encode(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:

@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
 class NanoTokenizer:
@@ -14,19 +15,37 @@ class NanoTokenizer:
 
     SPECIAL_TOKENS = [PAD_TOKEN, UNK_TOKEN, CLS_TOKEN, SEP_TOKEN, MASK_TOKEN]
 
-    def __init__(self, vocab: Optional[Dict[str, int]] = None):
-        if vocab is not None:
-            self.vocab = vocab
-            self.inv_vocab = {v: k for k, v in vocab.items()}
-        else:
-            self.vocab = {tok: idx for idx, tok in enumerate(self.SPECIAL_TOKENS)}
-            self.inv_vocab = {idx: tok for idx, tok in enumerate(self.SPECIAL_TOKENS)}
-            self._init_default_subwords()
+    def __init__(self, vocab: Optional[Dict[str, int]] = None, json_path: Optional[str] = None):
+        self.fast_tokenizer = None
+        
+        # Try loading pretrained WordPiece tokenizer
+        if json_path is None:
+            default_json = Path(__file__).resolve().parent.parent.parent.parent / "data" / "tokenizer_legal.json"
+            if default_json.exists():
+                json_path = str(default_json)
 
-        self.pad_id = self.vocab[self.PAD_TOKEN]
-        self.unk_id = self.vocab[self.UNK_TOKEN]
-        self.cls_id = self.vocab[self.CLS_TOKEN]
-        self.sep_id = self.vocab[self.SEP_TOKEN]
+        if json_path is not None and Path(json_path).exists():
+            try:
+                from tokenizers import Tokenizer
+                self.fast_tokenizer = Tokenizer.from_file(str(json_path))
+                self.vocab = self.fast_tokenizer.get_vocab()
+                self.inv_vocab = {v: k for k, v in self.vocab.items()}
+            except Exception:
+                self.fast_tokenizer = None
+
+        if self.fast_tokenizer is None:
+            if vocab is not None:
+                self.vocab = vocab
+                self.inv_vocab = {v: k for k, v in vocab.items()}
+            else:
+                self.vocab = {tok: idx for idx, tok in enumerate(self.SPECIAL_TOKENS)}
+                self.inv_vocab = {idx: tok for idx, tok in enumerate(self.SPECIAL_TOKENS)}
+                self._init_default_subwords()
+
+        self.pad_id = self.vocab.get(self.PAD_TOKEN, 0)
+        self.unk_id = self.vocab.get(self.UNK_TOKEN, 1)
+        self.cls_id = self.vocab.get(self.CLS_TOKEN, 2)
+        self.sep_id = self.vocab.get(self.SEP_TOKEN, 3)
 
     def _init_default_subwords(self):
         # Base ASCII bytes (0-127) and common UTF-8 accents/symbols
@@ -95,11 +114,14 @@ class NanoTokenizer:
 
     def encode(self, text: str, max_length: Optional[int] = None) -> List[int]:
         norm = self.normalize(text)
-        words = re.findall(r"[\w']+|[^\w\s]", norm, re.UNICODE)
-        token_ids = []
-        for w in words:
-            for t in self.tokenize_word(w):
-                token_ids.append(self.vocab.get(t, self.unk_id))
+        if self.fast_tokenizer is not None:
+            token_ids = self.fast_tokenizer.encode(norm).ids
+        else:
+            words = re.findall(r"[\w']+|[^\w\s]", norm, re.UNICODE)
+            token_ids = []
+            for w in words:
+                for t in self.tokenize_word(w):
+                    token_ids.append(self.vocab.get(t, self.unk_id))
         if max_length is not None:
             token_ids = token_ids[:max_length]
         return token_ids
@@ -113,11 +135,9 @@ class NanoTokenizer:
         Returns (input_ids, attention_mask).
         """
         # Reserve slots for [CLS], [SEP], [SEP]
-        avail = max(0, max_length - 3)
-        max_q = min(len(query.split()), 64)
-        max_c = avail - max_q
-
+        max_q = 64
         q_ids = self.encode(query, max_length=max_q)
+        max_c = max(0, max_length - 3 - len(q_ids))
         c_ids = self.encode(context, max_length=max_c)
 
         input_ids = [self.cls_id] + q_ids + [self.sep_id] + c_ids + [self.sep_id]

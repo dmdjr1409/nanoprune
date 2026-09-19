@@ -402,8 +402,8 @@ def main():
     total_docs = len(suite)
     print(f"📋 Loaded {total_docs} calibrated test cases across 4 difficulty tiers.")
 
-    # 1. Initialize Pure NanoPrune v0.3
-    print("\n[1/3] Initializing Pure NanoPrune v0.3...")
+    # 1. Initialize Pure NanoPrune v0.4
+    print("\n[1/3] Initializing Pure NanoPrune v0.4 (5.4M params)...")
     t0 = time.perf_counter()
     nanoprune = NanoPruner.load()
     t_load_np = (time.perf_counter() - t0) * 1000.0
@@ -417,11 +417,11 @@ def main():
     print(f"      Laya ready in {t_load_laya:.2f} ms on device: {laya_agent.device}.")
 
     # 3. Initialize Hybrid Cascade Pruner
-    print("\n[3/3] Initializing Hybrid Cascade Pruner (Tier 1: NanoPrune, Tier 2: Laya)...")
+    print("\n[3/3] Initializing Hybrid Cascade Pruner (Tier 1: NanoPrune, Tier 2: Ensemble Laya)...")
     cascade = HybridCascadePruner(
         nanoprune_model=nanoprune,
-        drop_threshold=0.35,
-        keep_threshold=0.75,
+        drop_threshold=0.75,
+        keep_threshold=0.95,
         enable_laya=True
     )
     cascade.laya_agent = laya_agent
