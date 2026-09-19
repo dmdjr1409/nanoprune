@@ -3,384 +3,296 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NanoPrune — Recherche Confidentielle & Système 1 Local</title>
+  <title>NanoPrune</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #07090e;
-      --card-bg: rgba(18, 23, 35, 0.75);
-      --card-border: rgba(255, 255, 255, 0.08);
-      --emerald: #10b981;
-      --emerald-glow: rgba(16, 185, 129, 0.25);
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --accent: #3b82f6;
+      --bg: #0d0e12;
+      --panel: #16181f;
+      --border: #232634;
+      --border-focus: #3b82f6;
+      --text: #f3f4f6;
+      --text-muted: #8b92a5;
+      --accent: #2563eb;
+      --match: #10b981;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 32px 20px;
-      overflow-x: hidden;
+      padding: 40px 20px;
+      -webkit-font-smoothing: antialiased;
     }
-    .mesh-bg {
-      position: fixed;
-      top: -20%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 800px;
-      height: 400px;
-      background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, rgba(59, 130, 246, 0.06) 50%, transparent 70%);
-      filter: blur(80px);
-      z-index: -1;
-      pointer-events: none;
-    }
-    .header {
+    .app-shell {
       width: 100%;
-      max-width: 900px;
+      max-width: 760px;
+    }
+    .top-nav {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 32px;
+      margin-bottom: 28px;
     }
-    .logo {
+    .brand {
       display: flex;
       align-items: center;
-      gap: 12px;
-    }
-    .logo-icon {
-      width: 36px;
-      height: 36px;
-      background: linear-gradient(135deg, #10b981, #059669);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 18px;
-      color: #fff;
-      box-shadow: 0 0 20px var(--emerald-glow);
-    }
-    .logo-text {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-    .logo-text span {
-      color: var(--emerald);
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      padding: 6px 14px;
-      border-radius: 9999px;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--emerald);
-    }
-    .badge-dot {
-      width: 8px;
-      height: 8px;
-      background: var(--emerald);
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--emerald);
-      animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.5; transform: scale(0.85); }
-    }
-    .container {
-      width: 100%;
-      max-width: 900px;
-    }
-    .hero {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-    .hero h1 {
-      font-size: 32px;
-      font-weight: 700;
-      letter-spacing: -0.8px;
-      margin-bottom: 12px;
-    }
-    .hero p {
-      color: var(--text-muted);
-      font-size: 15px;
-      max-width: 620px;
-      margin: 0 auto;
-      line-height: 1.6;
-    }
-    .presets {
-      display: flex;
       gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 16px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      letter-spacing: -0.2px;
     }
-    .preset-btn {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--card-border);
+    .brand-tag {
+      background: #1f2330;
       color: var(--text-muted);
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.2s;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
     }
-    .preset-btn:hover {
-      background: rgba(16, 185, 129, 0.15);
-      border-color: rgba(16, 185, 129, 0.4);
-      color: var(--text);
+    .nav-status {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
     }
-    .search-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(16px);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      padding: 16px 20px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-      margin-bottom: 24px;
+    
+    /* Search Bar - Style Raycast / Linear */
+    .search-box {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      margin-bottom: 20px;
     }
-    .search-row {
+    .search-box:focus-within {
+      border-color: #3b82f6;
+      box-shadow: 0 8px 30px rgba(59, 130, 246, 0.12);
+    }
+    .search-input-wrapper {
       display: flex;
       align-items: center;
+      padding: 14px 18px;
       gap: 12px;
+    }
+    .search-icon {
+      color: #64748b;
+      flex-shrink: 0;
     }
     .search-input {
       flex: 1;
       background: transparent;
       border: none;
       outline: none;
-      color: var(--text);
-      font-size: 18px;
+      color: #fff;
+      font-size: 16px;
       font-family: inherit;
     }
     .search-input::placeholder {
-      color: #64748b;
+      color: #525a70;
     }
-    .btn-search {
-      background: var(--emerald);
-      color: #042f20;
-      font-weight: 700;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.2s;
-      box-shadow: 0 0 15px var(--emerald-glow);
-    }
-    .btn-search:hover {
-      background: #34d399;
-      transform: translateY(-1px);
-    }
-    .metrics-bar {
+    .search-meta {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 16px;
-      background: rgba(255, 255, 255, 0.02);
-      border-radius: 10px;
-      margin-top: 14px;
-      font-size: 13px;
+      padding: 8px 18px 12px 18px;
+      font-size: 12px;
       color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
+      border-top: 1px solid rgba(255, 255, 255, 0.03);
     }
-    .metric-val {
-      color: var(--emerald);
-      font-weight: 700;
+    .quick-filters {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    .results-list {
+    .filter-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover {
+      background: #1f2330;
+      color: #fff;
+      border-color: #3b4256;
+    }
+
+    /* Results */
+    .results {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
-    .result-card {
-      background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      border: 1px solid var(--card-border);
-      border-radius: 14px;
-      padding: 20px;
-      transition: all 0.2s;
+    .result-item {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+      transition: border-color 0.15s, background-color 0.15s;
     }
-    .result-card:hover {
-      border-color: rgba(16, 185, 129, 0.35);
-      transform: translateY(-2px);
+    .result-item:hover {
+      border-color: #343a4e;
+      background: #191c24;
     }
-    .result-header {
+    .result-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-    .result-file {
-      font-family: 'JetBrains Mono', monospace;
+    .result-title {
       font-size: 13px;
-      color: var(--accent);
+      font-weight: 500;
+      color: #93c5fd;
       display: flex;
       align-items: center;
       gap: 6px;
+      font-family: 'JetBrains Mono', monospace;
     }
-    .cert-pill {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      color: #34d399;
+    .score-badge {
       font-size: 11px;
-      font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 6px;
-      letter-spacing: 0.5px;
-    }
-    .result-highlight {
-      background: rgba(16, 185, 129, 0.08);
-      border-left: 3px solid var(--emerald);
-      padding: 12px 16px;
-      border-radius: 0 8px 8px 0;
-      font-size: 15px;
-      color: #fff;
-      margin-bottom: 12px;
-      line-height: 1.5;
-    }
-    .result-highlight mark {
-      background: rgba(16, 185, 129, 0.3);
-      color: #a7f3d0;
-      padding: 2px 4px;
+      font-weight: 600;
+      padding: 2px 8px;
       border-radius: 4px;
+      background: rgba(16, 185, 129, 0.1);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.25);
     }
-    .result-text {
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.6;
-    }
-    .empty-state {
-      text-align: center;
-      padding: 48px 20px;
-      color: var(--text-muted);
+    .proof-quote {
       font-size: 14px;
+      color: #fff;
+      line-height: 1.5;
+      margin-bottom: 8px;
+      padding-left: 10px;
+      border-left: 2px solid #3b82f6;
     }
-    .empty-icon {
-      font-size: 32px;
-      margin-bottom: 12px;
-      opacity: 0.7;
+    .proof-quote strong {
+      color: #60a5fa;
+    }
+    .full-context {
+      font-size: 12.5px;
+      color: #80889c;
+      line-height: 1.55;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: #555d73;
+      font-size: 13px;
     }
   </style>
 </head>
 <body>
-  <div class="mesh-bg"></div>
+  <div class="app-shell">
+    <header class="top-nav">
+      <div class="brand">
+        <span>NanoPrune</span>
+        <span class="brand-tag">v0.1</span>
+      </div>
+      <div class="nav-status">
+        <span id="statInfo">Chargement...</span>
+      </div>
+    </header>
 
-  <header class="header">
-    <div class="logo">
-      <div class="logo-icon">N</div>
-      <div class="logo-text">Nano<span>Prune</span></div>
-    </div>
-    <div class="badge">
-      <span class="badge-dot"></span>
-      <span>Système 1 Actif (2.8 Mo) • 100% Hors-Ligne</span>
-    </div>
-  </header>
-
-  <main class="container">
-    <div class="hero">
-      <h1>Recherche Factuelle & Précise sans LLM</h1>
-      <p>Idéal pour dossiers médicaux, contrats et secrets professionnels. Zéro fuite vers le cloud, zéro hallucination, latence &lt; 20 ms sur votre machine.</p>
-      
-      <div class="presets">
-        <button class="preset-btn" onclick="setQuery('Allergie pénicilline Dupont')">🩺 Allergie Dupont</button>
-        <button class="preset-btn" onclick="setQuery('Dernière ordonnance Claire Martin')">📋 Ordonnance Martin</button>
-        <button class="preset-btn" onclick="setQuery('Contre-indication bêta-bloquant')">⚠️ Contre-indication</button>
-        <button class="preset-btn" onclick="setQuery('Clause de non-concurrence 12 mois')">⚖️ Clause 12 mois</button>
+    <div class="search-box">
+      <div class="search-input-wrapper">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" class="search-input" type="text" placeholder="Rechercher dans les dossiers (ex: allergie Dupont, ordonnance Martin...)" autofocus oninput="debounceSearch()" onkeydown="if(event.key==='Enter') doSearch()" />
+      </div>
+      <div class="search-meta">
+        <div class="quick-filters">
+          <button class="filter-btn" onclick="applyQuery('Allergie pénicilline Dupont')">Allergie Dupont</button>
+          <button class="filter-btn" onclick="applyQuery('Contre-indication AINS Kardegic')">Contre-indication Martin</button>
+          <button class="filter-btn" onclick="applyQuery('Aucune allergie Sophie Bernard')">Sans allergie Bernard</button>
+        </div>
+        <div id="latencyTag">-- ms</div>
       </div>
     </div>
 
-    <div class="search-card">
-      <div class="search-row">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="searchInput" class="search-input" type="text" placeholder="Posez une question sur vos dossiers..." onkeydown="if(event.key==='Enter') executeSearch()" />
-        <button class="btn-search" onclick="executeSearch()">Rechercher</button>
-      </div>
-
-      <div class="metrics-bar">
-        <span>⚡ Latence : <span id="mLatency" class="metric-val">-- ms</span></span>
-        <span>📑 Chunks analysés : <span id="mChunks" class="metric-val">--</span></span>
-        <span>🔒 Hallucination : <span class="metric-val">0.0% (Garanti)</span></span>
-      </div>
+    <div id="results" class="results">
+      <div class="empty">Tape une requête pour chercher instantanément.</div>
     </div>
-
-    <div id="resultsContainer" class="results-list">
-      <div class="empty-state">
-        <div class="empty-icon">📁</div>
-        Tapez une requête ci-dessus ou cliquez sur un exemple pour voir le moteur Système 1 extraire la preuve exacte en temps réel.
-      </div>
-    </div>
-  </main>
+  </div>
 
   <script>
-    function setQuery(q) {
-      document.getElementById('searchInput').value = q;
-      executeSearch();
+    let timer = null;
+
+    function applyQuery(val) {
+      document.getElementById('q').value = val;
+      doSearch();
     }
 
-    async function executeSearch() {
-      const query = document.getElementById('searchInput').value.trim();
-      if (!query) return;
+    function debounceSearch() {
+      clearTimeout(timer);
+      timer = setTimeout(doSearch, 120);
+    }
 
-      const container = document.getElementById('resultsContainer');
-      container.innerHTML = '<div class="empty-state">Analyse neuronale en cours...</div>';
+    function cleanMd(str) {
+      if (!str) return '';
+      return str
+        .replace(/\[([^\]]+)\]/g, '') // remove [Patient Dupont] tag
+        .replace(/#{1,6}\s+/g, '')     // remove ## headers
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\s*[-*]\s+/gm, '')  // remove list dashes
+        .trim();
+    }
+
+    async function doSearch() {
+      const query = document.getElementById('q').value.trim();
+      const container = document.getElementById('results');
+      if (!query) {
+        container.innerHTML = '<div class="empty">Tape une requête pour chercher instantanément.</div>';
+        document.getElementById('latencyTag').innerText = '-- ms';
+        return;
+      }
 
       try {
         const res = await fetch('/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: query, threshold: 0.40, top_k: 5 })
+          body: JSON.stringify({ query: query, threshold: 0.45, top_k: 5 })
         });
         const data = await res.json();
-
-        document.getElementById('mLatency').innerText = `${data.latency_ms} ms`;
-        document.getElementById('mChunks').innerText = `${data.candidates_evaluated} / ${data.total_chunks_scanned}`;
+        document.getElementById('latencyTag').innerText = `${data.latency_ms} ms (${data.matches_retained} trouvés)`;
 
         if (!data.results || data.results.length === 0) {
-          container.innerHTML = `
-            <div class="empty-state">
-              <div class="empty-icon">🔍</div>
-              Aucun extrait ne correspond avec une certitude suffisante (&gt; 40%).<br/>
-              <em>Le modèle Système 1 refuse d'inventer une fausse réponse.</em>
-            </div>
-          `;
+          container.innerHTML = '<div class="empty">Aucune preuve pertinente trouvée (rejet du faux positif).</div>';
           return;
         }
 
         container.innerHTML = data.results.map(r => `
-          <div class="result-card">
-            <div class="result-header">
-              <span class="result-file">📄 ${r.file_name}</span>
-              <span class="cert-pill">${r.confidence_pct} CERTIFIÉ</span>
+          <div class="result-item">
+            <div class="result-top">
+              <span class="result-title">📄 ${r.file_name}</span>
+              <span class="score-badge">${r.confidence_pct} certifié</span>
             </div>
-            <div class="result-highlight">
-              💡 Preuve exacte : <strong>"${r.highlight}"</strong>
-            </div>
-            <div class="result-text">${r.text}</div>
+            <div class="proof-quote">${cleanMd(r.highlight)}</div>
+            <div class="full-context">${cleanMd(r.text)}</div>
           </div>
         `).join('');
 
       } catch (err) {
-        container.innerHTML = `<div class="empty-state" style="color: #ef4444;">Erreur de communication locale : ${err.message}</div>`;
+        container.innerHTML = `<div class="empty">Erreur: ${err.message}</div>`;
       }
     }
 
-    // Charger le statut au démarrage
     fetch('/api/status').then(r => r.json()).then(st => {
-      document.getElementById('mChunks').innerText = `0 / ${st.indexed_chunks}`;
+      document.getElementById('statInfo').innerText = `${st.indexed_chunks} extraits indexés • 100% hors-ligne`;
     });
   </script>
 </body>
