@@ -52,6 +52,27 @@ class NanoPruner:
 
     @classmethod
     def load(cls, model_path: Optional[Union[str, Path]] = None, threshold: float = 0.70) -> "NanoPruner":
+        if model_path is None:
+            pkg_root = Path(__file__).resolve().parent.parent.parent.parent
+            pt_candidate = pkg_root / "weights" / "nanoprune-v0.1.pt"
+            onnx_candidate = pkg_root / "weights" / "nanoprune-v0.1.onnx"
+            if onnx_candidate.exists():
+                try:
+                    import onnxruntime
+                    model_path = onnx_candidate
+                except ImportError:
+                    if pt_candidate.exists():
+                        try:
+                            import torch
+                            model_path = pt_candidate
+                        except ImportError:
+                            pass
+            elif pt_candidate.exists():
+                try:
+                    import torch
+                    model_path = pt_candidate
+                except ImportError:
+                    pass
         return cls(model_path=model_path, threshold=threshold)
 
     def score_pair(self, query: str, context: str) -> float:
