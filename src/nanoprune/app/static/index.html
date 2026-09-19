@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NanoPrune</title>
+  <title>NanoPrune — Recherche Confidentielle</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -12,10 +12,9 @@
       --bg: #0d0e12;
       --panel: #16181f;
       --border: #232634;
-      --border-focus: #3b82f6;
       --text: #f3f4f6;
       --text-muted: #8b92a5;
-      --accent: #2563eb;
+      --accent: #3b82f6;
       --match: #10b981;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -27,18 +26,18 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 20px;
+      padding: 36px 20px;
       -webkit-font-smoothing: antialiased;
     }
     .app-shell {
       width: 100%;
-      max-width: 760px;
+      max-width: 780px;
     }
     .top-nav {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 28px;
+      margin-bottom: 24px;
     }
     .brand {
       display: flex;
@@ -58,13 +57,114 @@
       border-radius: 4px;
       border: 1px solid var(--border);
     }
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-import {
+      background: #1e2433;
+      border: 1px solid #2d354a;
+      color: #93c5fd;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .btn-import:hover {
+      background: #2563eb;
+      color: #fff;
+      border-color: #3b82f6;
+    }
     .nav-status {
       font-size: 12px;
       color: var(--text-muted);
       font-family: 'JetBrains Mono', monospace;
     }
     
-    /* Search Bar - Style Raycast / Linear */
+    /* Import Drawer */
+    .import-drawer {
+      display: none;
+      background: var(--panel);
+      border: 1px solid #2e3549;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .drawer-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: #fff;
+      display: flex;
+      justify-content: space-between;
+    }
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .dropzone {
+      border: 2px dashed #2b3245;
+      border-radius: 8px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(59, 130, 246, 0.05);
+    }
+    .dropzone-text {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .dropzone-text strong {
+      color: #fff;
+    }
+    .path-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .path-input {
+      flex: 1;
+      background: #0d0e12;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .btn-load-path {
+      background: #222838;
+      border: 1px solid #323b52;
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .btn-load-path:hover {
+      background: #2a334a;
+    }
+
+    /* Search Box */
     .search-box {
       position: relative;
       background: var(--panel);
@@ -204,15 +304,43 @@
         <span>NanoPrune</span>
         <span class="brand-tag">v0.1</span>
       </div>
-      <div class="nav-status">
-        <span id="statInfo">Chargement...</span>
+      <div class="nav-actions">
+        <button class="btn-import" onclick="toggleDrawer()">
+          <span>📁</span>
+          <span id="btnImportLabel">Changer de dossier...</span>
+        </button>
+        <div class="nav-status">
+          <span id="statInfo">Chargement...</span>
+        </div>
       </div>
     </header>
 
+    <!-- Import Drawer / File Selector -->
+    <div id="importDrawer" class="import-drawer">
+      <div class="drawer-title">
+        <span>Importer vos dossiers ou documents</span>
+        <button class="close-btn" onclick="toggleDrawer()">✕</button>
+      </div>
+
+      <div id="dropzone" class="dropzone" onclick="document.getElementById('fileInput').click()">
+        <div class="dropzone-text">
+          Glissez-déposez un dossier ou des fichiers ici, ou <strong>cliquez pour parcourir votre Mac</strong>
+        </div>
+        <input id="fileInput" type="file" webkitdirectory directory multiple style="display: none;" onchange="handleFilesSelected(this.files)" />
+        <span style="font-size: 11px; color: #64748b;">Formats acceptés : PDF, Word, Markdown, Texte brut, JSON (100% analysé en local)</span>
+      </div>
+
+      <div class="path-row">
+        <input id="pathInput" class="path-input" type="text" placeholder="Ou entrez un chemin direct (ex: ~/Documents/Clients, sample_data/medical...)" onkeydown="if(event.key==='Enter') loadFolderFromPath()" />
+        <button class="btn-load-path" onclick="loadFolderFromPath()">Charger</button>
+      </div>
+    </div>
+
+    <!-- Search Box -->
     <div class="search-box">
       <div class="search-input-wrapper">
         <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="q" class="search-input" type="text" placeholder="Rechercher dans les dossiers (ex: allergie Dupont, ordonnance Martin...)" autofocus oninput="debounceSearch()" onkeydown="if(event.key==='Enter') doSearch()" />
+        <input id="q" class="search-input" type="text" placeholder="Rechercher dans les dossiers (ex: allergie Dupont, clause de préavis...)" autofocus oninput="debounceSearch()" onkeydown="if(event.key==='Enter') doSearch()" />
       </div>
       <div class="search-meta">
         <div class="quick-filters">
@@ -232,6 +360,11 @@
   <script>
     let timer = null;
 
+    function toggleDrawer() {
+      const d = document.getElementById('importDrawer');
+      d.style.display = (d.style.display === 'block') ? 'none' : 'block';
+    }
+
     function applyQuery(val) {
       document.getElementById('q').value = val;
       doSearch();
@@ -245,10 +378,10 @@
     function cleanMd(str) {
       if (!str) return '';
       return str
-        .replace(/\[([^\]]+)\]/g, '') // remove [Patient Dupont] tag
-        .replace(/#{1,6}\s+/g, '')     // remove ## headers
+        .replace(/\[([^\]]+)\]/g, '')
+        .replace(/#{1,6}\s+/g, '')
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/^\s*[-*]\s+/gm, '')  // remove list dashes
+        .replace(/^\s*[-*]\s+/gm, '')
         .trim();
     }
 
@@ -290,6 +423,79 @@
         container.innerHTML = `<div class="empty">Erreur: ${err.message}</div>`;
       }
     }
+
+    async function loadFolderFromPath() {
+      const path = document.getElementById('pathInput').value.trim();
+      if (!path) return;
+
+      const stat = document.getElementById('statInfo');
+      stat.innerText = 'Indexation en cours...';
+
+      try {
+        const res = await fetch('/api/load_folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_path: path })
+        });
+        const data = await res.json();
+        if (data.error) {
+          alert(data.error);
+          stat.innerText = 'Erreur d\'indexation';
+          return;
+        }
+        stat.innerText = `${data.total_chunks} extraits indexés • 100% hors-ligne`;
+        toggleDrawer();
+        doSearch();
+      } catch (e) {
+        alert('Erreur: ' + e.message);
+      }
+    }
+
+    async function handleFilesSelected(fileList) {
+      if (!fileList || fileList.length === 0) return;
+      
+      const stat = document.getElementById('statInfo');
+      stat.innerText = `Lecture de ${fileList.length} fichiers...`;
+
+      const filesData = [];
+      for (const file of fileList) {
+        if (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.csv')) {
+          const text = await file.text();
+          filesData.push({ name: file.name, content: text });
+        }
+      }
+
+      if (filesData.length === 0) {
+        alert('Aucun fichier texte/markdown trouvé dans la sélection.');
+        stat.innerText = 'Prêt';
+        return;
+      }
+
+      stat.innerText = `Indexation de ${filesData.length} fichiers...`;
+      try {
+        const res = await fetch('/api/index_direct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ files: filesData })
+        });
+        const data = await res.json();
+        stat.innerText = `${data.total_chunks} extraits indexés • 100% hors-ligne`;
+        toggleDrawer();
+        doSearch();
+      } catch (e) {
+        alert('Erreur d\'import: ' + e.message);
+      }
+    }
+
+    // Drag and Drop
+    const dz = document.getElementById('dropzone');
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', () => { dz.classList.remove('dragover'); });
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      handleFilesSelected(e.dataTransfer.files);
+    });
 
     fetch('/api/status').then(r => r.json()).then(st => {
       document.getElementById('statInfo').innerText = `${st.indexed_chunks} extraits indexés • 100% hors-ligne`;

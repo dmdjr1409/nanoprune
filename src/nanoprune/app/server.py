@@ -66,9 +66,11 @@ class NanoPruneHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         elif self.path == "/api/load_folder":
-            folder = data.get("folder_path", "").strip()
-            if not folder or not Path(folder).exists():
-                self._send_json({"error": f"Dossier introuvable: {folder}"}, status=400)
+            raw_folder = data.get("folder_path", "").strip()
+            folder = os.path.expanduser(raw_folder)
+            target = Path(folder)
+            if not folder or not target.exists():
+                self._send_json({"error": f"Dossier introuvable : {raw_folder}"}, status=400)
                 return
             count = self.context.load_directory(folder)
             self._send_json({
@@ -76,6 +78,29 @@ class NanoPruneHandler(http.server.SimpleHTTPRequestHandler):
                 "files_indexed": count,
                 "total_chunks": len(self.context.indexer.chunks),
                 "folder": folder,
+            })
+            return
+
+        elif self.path == "/api/index_direct":
+            files = data.get("files", [])
+            if not files:
+                self._send_json({"error": "Aucun fichier reçu"}, status=400)
+                return
+            
+            # Index directly into the engine
+            self.context.indexer.chunks.clear()
+            for f in files:
+                fname = f.get("name", "document.txt")
+                content = f.get("content", "")
+                if content:
+                    self.context.indexer._chunk_content(content, fname, fname)
+
+            self.context.current_folder = f"Import manuel ({len(files)} fichiers)"
+            self._send_json({
+                "status": "ok",
+                "files_indexed": len(files),
+                "total_chunks": len(self.context.indexer.chunks),
+                "folder": self.context.current_folder,
             })
             return
 
