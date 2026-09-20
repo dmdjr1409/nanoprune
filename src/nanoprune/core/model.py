@@ -15,7 +15,8 @@ except ImportError:
 if HAS_TORCH:
     class NanoPruneModel(nn.Module):
         """
-        NanoPrune: 2-layer Transformer Encoder (~960k parameters)
+        NanoPrune v0.4: 4-layer Transformer encoder (~5.45M parameters
+        with the committed 8192-token vocabulary and multi-head outputs).
         Single-pass calibrated relevance scoring for RAG context pruning.
         """
         def __init__(

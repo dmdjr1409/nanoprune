@@ -10,9 +10,9 @@ from .engine.search import LocalSearchEngine
 def main():
     parser = argparse.ArgumentParser(
         prog="nanoprune",
-        description="NanoPrune: The 2.8MB System One Calibrated Decision & RAG Pruner.",
+        description="NanoPrune v0.4: local System One relevance scoring and RAG pruning.",
     )
-    parser.add_argument("--version", action="version", version="nanoprune 0.3.0")
+    parser.add_argument("--version", action="version", version="nanoprune 0.4.0")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -40,7 +40,7 @@ def main():
     choice_parser.add_argument("--options", nargs="+", default=["human_rights", "business_tax", "public_admin", "civil_family"], help="Options")
 
     # Command: score (Primitive 3)
-    score_parser = subparsers.add_parser("score", help="Évaluer le niveau de complexité ou de risque (Primitive Score)")
+    score_parser = subparsers.add_parser("score", help="Primitive Score expérimentale en v0.4 (échelle 0 à 4)")
     score_parser.add_argument("text", type=str, help="Texte à noter sur barème ordinal (0 à 4)")
 
     args = parser.parse_args()

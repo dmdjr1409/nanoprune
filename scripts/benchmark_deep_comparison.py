@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Deep Head-to-Head Benchmark: Pure NanoPrune v0.3 vs Pure Laya vs Hybrid Cascade
+Development Benchmark: Pure NanoPrune v0.4 vs Pure Laya vs Hybrid Cascade
 Measures:
 1. Exact latency & throughput on real documents
 2. Memory and disk footprint
 3. Semantic precision, recall, and false-positive resilience on hard negatives & boundary cases
 4. Agreement rate between Cascade and Pure Laya
+
+Important: the cascade thresholds/logic were iterated on this development set.
+Results from this script are therefore not an independent held-out benchmark.
 """
 import sys
 import os

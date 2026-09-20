@@ -8,9 +8,12 @@ from .pruner import NanoPruner
 class HybridCascadePruner:
     """
     Two-Tier Production System One Cascade:
-    - Tier 1: NanoPrune v0.3 (1.4 ms) filters 85-90% of unambiguous noise and clear matches.
-    - Tier 2: Laya 421M (51 ms) arbitrates only ambiguous boundary cases [low_thresh, high_thresh].
-    Combines sub-millisecond throughput with 421M-parameter semantic depth.
+    - Tier 1: NanoPrune v0.4 filters obvious negatives and high-confidence matches.
+    - Tier 2: Laya 421M arbitrates ambiguous boundary cases.
+
+    Latency and dispatch rates depend on hardware/data. See the recorded
+    development benchmark in data/benchmark_results.json instead of relying
+    on hard-coded performance claims here.
     """
     def __init__(
         self,

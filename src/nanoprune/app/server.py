@@ -41,7 +41,7 @@ class NanoPruneHandler(http.server.SimpleHTTPRequestHandler):
                 "status": "ready",
                 "indexed_chunks": len(self.context.indexer.chunks),
                 "current_folder": self.context.current_folder,
-                "model_type": "System One Calibrated Transformer (2.8MB)",
+                "model_type": "NanoPrune v0.4 Transformer (5.45M parameters)",
                 "offline": True,
             })
             return

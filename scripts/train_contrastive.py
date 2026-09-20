@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 NanoPrune v0.4.0 Contrastive Margin Training Pipeline.
-Trains 5.4M parameter Transformer with Contrastive Margin + BCE + Calibration.
+Trains the 5.45M-parameter Transformer with BCE relevance loss,
+contrastive margin regularization, and categorical choice loss.
 """
 import os
 import sys
@@ -174,7 +175,7 @@ def train():
                 mask = batch["attention_mask"].to(device)
                 labels = batch["label"].to(device)
 
-                probs, _ = model(input_ids, mask)
+                _, probs = model(input_ids, mask)
                 val_preds.extend(probs.squeeze(-1).cpu().numpy().tolist())
                 val_targets.extend(labels.cpu().numpy().tolist())
 
