@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import List, Tuple
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 import numpy as np
 import torch
@@ -86,7 +86,7 @@ def train_legal_edition(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    tokenizer = NanoTokenizer()
+    tokenizer = NanoTokenizer.char_level()  # v0.1-v0.3 used the char vocabulary
     pairs = load_legal_pairs(tsv_path)
 
     split = int(len(pairs) * 0.85)
@@ -108,6 +108,7 @@ def train_legal_edition(
         d_ff=512,
         n_layers=2,
         max_seq_len=256,
+        head_hidden=64,  # v0.1-v0.3 heads had 64 hidden units
     ).to(device)
 
     param_count = model.count_parameters()

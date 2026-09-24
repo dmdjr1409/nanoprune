@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 import numpy as np
 import torch
@@ -83,7 +83,7 @@ def train_distilled_v03(
     out_path = Path(output_dir)
     out_path.mkdir(parents=True, exist_ok=True)
 
-    tokenizer = NanoTokenizer()
+    tokenizer = NanoTokenizer.char_level()  # v0.1-v0.3 used the char vocabulary
     items = load_distilled_data(data_path)
 
     random.shuffle(items)
@@ -107,6 +107,7 @@ def train_distilled_v03(
         d_ff=512,
         n_layers=2,
         max_seq_len=256,
+        head_hidden=64,  # v0.1-v0.3 heads had 64 hidden units
         dropout=0.1,
         temperature=1.0,
         num_choices=4,
