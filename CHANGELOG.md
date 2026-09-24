@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.6.0 — 2026-09-24
+
+Semantic search: the first scorer that clearly beats keyword matching on the
+held-out suite (85.0 % accuracy vs 55–64.5 %, AUC 0.93 vs 0.62–0.65).
+
+### Added
+
+- `SemanticScorer` (`nanoprune.engine.dense`): a pretrained sentence-embedding
+  model run with onnxruntime and tokenizers (no PyTorch), mean/CLS pooling,
+  query/passage prefixes, passage-embedding cache, and Platt calibration
+  fitted on the dev suite (`fit_platt`). Same interface as `NanoPruner`.
+- `nanoprune download --dense multilingual-e5-large`: SHA-256-pinned download
+  of the ONNX export of intfloat/multilingual-e5-large (MIT), safe archive
+  extraction, int8 quantisation (552 MB instead of 2.2 GB, about 2x faster,
+  same accuracy) and calibration.
+- `nanoprune calibrate --dense DIR` for any other ONNX embedding model;
+  `--dense PATH|auto` / `--no-dense` on every model-using command. An installed
+  semantic model is used by default by `search`, `prune`, `app` and `eval`.
+- Search engine: semantic scorers score every passage (keyword-free matches are
+  found), and passage embeddings are computed once at import time.
+- `nanoprune eval` compares several models side by side and marks results on
+  the suite a model was calibrated on.
+- Distillation: `scripts/distill_teacher.py --teacher dense` labels training
+  pairs with the semantic model instead of Laya.
+- `semantic` extra; 11 new tests (97 in total).
+
+### Measured (held-out suite, threshold 0.5)
+
+- Semantic (multilingual-e5-large int8): 85.0 % [80–90], AUC 0.93, 45/50
+  paraphrases found, 25/50 lexical traps still accepted.
+- Mixing the semantic score with keyword features, fitted on dev, lowered
+  held-out accuracy to 60–68 %: not shipped.
+
 ## 0.5.0 — 2026-09-24
 
 Package release focused on security, honesty about what is running, and

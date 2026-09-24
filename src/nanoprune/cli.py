@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -11,8 +12,33 @@ from .errors import HeadUnavailableError, ModelNotFoundError, NanoPruneWarning, 
 REPO_SAMPLE_DIR = Path(__file__).resolve().parent.parent.parent / "sample_data" / "medical"
 
 
-def _load_pruner(args, threshold: float = 0.70) -> NanoPruner:
-    """Load the model requested on the command line and report what is running."""
+def _dense_requested(args):
+    """The semantic model to use: --dense, $NANOPRUNE_DENSE_MODEL or an installed one (unless --model/--no-dense)."""
+    dense = getattr(args, "dense", None)
+    if dense is not None or getattr(args, "model", None) is not None or getattr(args, "no_dense", False):
+        return dense
+    from .engine.dense import installed_dense_models
+    if os.environ.get("NANOPRUNE_DENSE_MODEL") or installed_dense_models():
+        return "auto"
+    return None
+
+
+def _load_pruner(args, threshold: float = 0.70):
+    """Load the scorer requested on the command line and report what is running.
+
+    A semantic model (``--dense``, or one installed with ``nanoprune download
+    --dense``) takes precedence; ``--model`` forces a NanoPrune checkpoint.
+    """
+    if getattr(args, "dense", None) is not None and getattr(args, "model", None) is not None:
+        raise ValueError("Use either --dense (semantic model) or --model (NanoPrune checkpoint), not both.")
+    dense = _dense_requested(args)
+    if dense is not None:
+        from .engine.dense import SemanticScorer
+        return SemanticScorer.load(dense, threshold=threshold)
+    return _load_nanoprune(args, threshold)
+
+
+def _load_nanoprune(args, threshold: float = 0.70) -> NanoPruner:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", NanoPruneWarning)
         pruner = NanoPruner.load(
@@ -29,14 +55,17 @@ def _load_pruner(args, threshold: float = 0.70) -> NanoPruner:
     return pruner
 
 
-def _backend_line(pruner: NanoPruner) -> str:
+def _backend_line(pruner) -> str:
     info = pruner.describe()
     if info["backend"] == "heuristic":
         return "Backend : heuristique par mots-clés (aucun modèle chargé)"
+    if info["backend"] == "semantic":
+        fitted = (info.get("calibration") or {}).get("fitted_on", "?")
+        return f"Backend : sémantique — {info['model_name']} (calibré sur la suite {fitted})"
     return f"Backend : {info['backend']} — {info['model_name']} (tokenizer {info['tokenizer']})"
 
 
-def _score_label(pruner: NanoPruner) -> str:
+def _score_label(pruner) -> str:
     return "Score mots-clés" if pruner.backend == "heuristic" else "Pertinence"
 
 
@@ -122,14 +151,23 @@ def cmd_info(args) -> int:
         print(f"  modèle trouvé : {spec.path} (tokenizer {spec.tokenizer_kind})")
     for note in notes:
         print(f"  note : {note}")
+    from .engine.dense import dense_models_dir, installed_dense_models
+    print(f"\nModèles sémantiques installés ({dense_models_dir()}) :")
+    for path in installed_dense_models():
+        print(f"  {path}")
+    if not installed_dense_models():
+        print("  aucun (nanoprune download --dense multilingual-e5-large)")
     print(f"\nNANOPRUNE_HOME={nanoprune_home() or '(non défini)'} ; cache={cache_dir()}")
     return 0
 
 
 def cmd_download(args) -> int:
-    from .download import DownloadError, download_release
+    from .download import DownloadError, download_dense_model, download_release
     try:
-        download_release(tag=args.tag, dest=args.dest, repo=args.repo, force=args.force)
+        if args.dense:
+            download_dense_model(args.dense, int8=not args.no_int8, keep_fp32=args.keep_fp32, dest=args.dest)
+        else:
+            download_release(tag=args.tag, dest=args.dest, repo=args.repo, force=args.force)
     except DownloadError as exc:
         print(f"Erreur : {exc}", file=sys.stderr)
         return 1
@@ -137,10 +175,25 @@ def cmd_download(args) -> int:
     return 0
 
 
+def cmd_calibrate(args) -> int:
+    from .engine.dense import SemanticScorer
+    scorer = SemanticScorer(args.dense)
+    calibration = scorer.calibrate(args.suite)
+    print(f"Calibration de {args.dense} sur la suite '{args.suite}' : a={calibration['a']:.3f}, b={calibration['b']:.3f}")
+    print("Évaluez ensuite sur l'autre suite : nanoprune eval --dense " + str(args.dense))
+    return 0
+
+
 def cmd_eval(args) -> int:
     from .evaluation import format_categories, format_table, run_standard_evaluation
 
-    pruner = None if args.no_model else _load_pruner(args)
+    models = []
+    if not args.no_model:
+        models.append(_load_nanoprune(args))
+        dense = _dense_requested(args)
+        if dense is not None:
+            from .engine.dense import SemanticScorer
+            models.append(SemanticScorer.load(dense))
     laya_agent = None
     if args.laya:
         try:
@@ -153,7 +206,7 @@ def cmd_eval(args) -> int:
 
     report = run_standard_evaluation(
         suites=args.suite or ["dev", "heldout"],
-        pruner=pruner,
+        models=models,
         laya_agent=laya_agent,
         threshold=args.threshold,
         n_bootstrap=args.bootstrap,
@@ -182,6 +235,9 @@ def build_parser() -> argparse.ArgumentParser:
     model_args.add_argument("--tokenizer", type=str, default=None, help="Fichier tokenizer WordPiece (.json)")
     model_args.add_argument("--strict", action="store_true",
                             help="Échouer si aucun modèle n'est trouvé au lieu d'utiliser l'heuristique")
+    model_args.add_argument("--dense", type=str, default=None,
+                            help="Modèle sémantique (dossier ONNX, ou 'auto') ; utilisé par défaut s'il est installé")
+    model_args.add_argument("--no-dense", action="store_true", help="Ne pas utiliser le modèle sémantique installé")
 
     subparsers = parser.add_subparsers(dest="command")
 
@@ -223,7 +279,16 @@ def build_parser() -> argparse.ArgumentParser:
     download_parser.add_argument("--dest", type=str, default=None, help="Dossier cible (défaut : ~/.cache/nanoprune/weights)")
     download_parser.add_argument("--repo", type=str, default=None, help="Dépôt owner/nom (défaut : dmdjr1409/nanoprune)")
     download_parser.add_argument("--force", action="store_true", help="Retélécharger même si le fichier est présent")
+    download_parser.add_argument("--dense", type=str, default=None,
+                                 help="Installer un modèle sémantique (ex : multilingual-e5-large) au lieu d'une release")
+    download_parser.add_argument("--no-int8", action="store_true", help="Garder le modèle sémantique en float32 (4x plus gros)")
+    download_parser.add_argument("--keep-fp32", action="store_true", help="Conserver aussi la version float32")
     download_parser.set_defaults(func=cmd_download)
+
+    calibrate_parser = subparsers.add_parser("calibrate", help="Calibrer un modèle sémantique sur une suite (défaut : dev)")
+    calibrate_parser.add_argument("--dense", required=True, help="Dossier du modèle sémantique (model.onnx + tokenizer.json)")
+    calibrate_parser.add_argument("--suite", default="dev", help="Suite de calibration (ne jamais utiliser 'heldout')")
+    calibrate_parser.set_defaults(func=cmd_calibrate)
 
     eval_parser = subparsers.add_parser("eval", parents=[model_args],
                                         help="Évaluer le modèle et les baselines sur les suites de test")

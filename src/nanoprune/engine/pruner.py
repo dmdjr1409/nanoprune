@@ -15,6 +15,7 @@ from ..core.weights import (
     onnx_initializer_info,
 )
 from ..errors import HeadUnavailableError, ModelNotFoundError, NanoPruneWarning, TokenizerMismatchError
+from .base import PruneRankMixin
 
 # Categories the v0.3/v0.4 choice heads were trained on, in output order.
 DEFAULT_CHOICE_LABELS = ["human_rights", "business_tax", "public_admin", "civil_family"]
@@ -29,7 +30,7 @@ NO_MODEL_MESSAGE = (
 )
 
 
-class NanoPruner:
+class NanoPruner(PruneRankMixin):
     """
     NanoPruner: high-level System One inference engine.
     Scores, ranks, and prunes RAG context chunks.
@@ -288,10 +289,6 @@ class NanoPruner:
 
     # ------------------------------------------------------------------ scoring
 
-    def score_pair(self, query: str, context: str) -> float:
-        """Score a single (query, context) pair."""
-        return self.score(query, [context])[0]
-
     def score(self, query: str, candidates: List[str], batch_size: int = 32) -> List[float]:
         """
         Relevance scores in [0.0, 1.0] for each candidate (same order as ``candidates``).
@@ -489,48 +486,6 @@ class NanoPruner:
 
     # Backwards-compatible name.
     _score_calibrated_heuristic = _score_keyword_heuristic
-
-    # ------------------------------------------------------------------ pruning
-
-    def prune(
-        self,
-        query: str,
-        candidates: List[str],
-        threshold: Optional[float] = None,
-    ) -> List[Tuple[str, float]]:
-        """
-        Drops candidates whose relevance score is below the threshold.
-        Returns sorted list of (candidate, score).
-        """
-        th = self.threshold if threshold is None else threshold
-        scores = self.score(query, candidates)
-        retained = [(cand, score) for cand, score in zip(candidates, scores) if score >= th]
-        retained.sort(key=lambda x: x[1], reverse=True)
-        return retained
-
-    def rank(
-        self,
-        query: str,
-        items: List[Dict[str, Any]],
-        key: str = "text",
-        threshold: Optional[float] = None,
-    ) -> List[Dict[str, Any]]:
-        """
-        Ranks dictionaries by relevance score of items[key].
-        """
-        texts = [item.get(key, "") for item in items]
-        scores = self.score(query, texts)
-        th = self.threshold if threshold is None else threshold
-
-        ranked = []
-        for item, score in zip(items, scores):
-            if score >= th:
-                res = dict(item)
-                res["nanoprune_score"] = score
-                ranked.append(res)
-
-        ranked.sort(key=lambda x: x["nanoprune_score"], reverse=True)
-        return ranked
 
 
 def re_words(text: str) -> List[str]:

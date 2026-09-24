@@ -61,7 +61,8 @@ class RequestError(Exception):
 class NanoPruneServerContext:
     """State shared by all requests: the index, the model and the search engine."""
 
-    def __init__(self, sample_data_dir: Optional[Path] = None, pruner: Optional[NanoPruner] = None):
+    def __init__(self, sample_data_dir: Optional[Path] = None, pruner: Optional[Any] = None):
+        """``pruner`` is any relevance scorer: NanoPruner, SemanticScorer... (default: NanoPruner.load())."""
         self.lock = threading.RLock()
         self.indexer = LocalDocumentIndexer()
         with warnings.catch_warnings(record=True) as caught:
@@ -79,6 +80,7 @@ class NanoPruneServerContext:
         with self.lock:
             self.indexer.clear()
             count = self.indexer.index_directory(dir_path)
+            self.engine.prepare()
             self.current_folder = dir_path
             report = self.indexer.last_report
             self.last_skipped = [{"file": f, "reason": r} for f, r in report.get("skipped", [])]
@@ -116,6 +118,7 @@ class NanoPruneServerContext:
                 if content.strip():
                     self.indexer.index_text(content, name, f"import/{name}")
                     indexed += 1
+            self.engine.prepare()
             self.current_folder = f"Import manuel ({indexed} fichiers)"
             self.last_skipped = skipped
             return {
@@ -299,7 +302,7 @@ class _LocalServer(ThreadingHTTPServer):
 
 
 def make_server(port: int = 7860, sample_data_dir: Optional[Path] = None,
-                pruner: Optional[NanoPruner] = None, log_requests: bool = True) -> _LocalServer:
+                pruner: Optional[Any] = None, log_requests: bool = True) -> _LocalServer:
     """Create the server (bound to 127.0.0.1 only) without starting it."""
     context = NanoPruneServerContext(sample_data_dir=sample_data_dir, pruner=pruner)
     attributes: Dict[str, Any] = {"context": context}
@@ -309,7 +312,7 @@ def make_server(port: int = 7860, sample_data_dir: Optional[Path] = None,
     return _LocalServer(("127.0.0.1", port), handler)
 
 
-def run_app(port: int = 7860, sample_data_dir: Optional[Path] = None, pruner: Optional[NanoPruner] = None):
+def run_app(port: int = 7860, sample_data_dir: Optional[Path] = None, pruner: Optional[Any] = None):
     try:
         server = make_server(port=port, sample_data_dir=sample_data_dir, pruner=pruner)
     except OSError as exc:
@@ -322,6 +325,8 @@ def run_app(port: int = 7860, sample_data_dir: Optional[Path] = None, pruner: Op
     print("🔒 Écoute uniquement en local (127.0.0.1) ; aucune requête réseau sortante.")
     if info["backend"] == "heuristic":
         print("⚠️  Aucun modèle chargé : les scores viennent de l'heuristique par mots-clés.")
+    elif info["backend"] == "semantic":
+        print(f"🧠 Recherche sémantique : {info['model_name']}")
     else:
         print(f"🧠 Modèle : {info['model_name']} ({info['backend']})")
     try:

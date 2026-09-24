@@ -298,19 +298,33 @@ def format_categories(results: Dict[str, Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _model_label(model, suite_name: str) -> str:
+    info = model.describe()
+    label = f"{info.get('backend')} model ({info.get('model_name')})"
+    fitted_on = (info.get("calibration") or {}).get("fitted_on")
+    if fitted_on == suite_name:
+        label += " [calibrated on this suite]"
+    return label
+
+
 def run_standard_evaluation(
     suites: Sequence[str] = ("dev", "heldout"),
     pruner=None,
     laya_agent=None,
     threshold: float = 0.5,
     n_bootstrap: int = 1000,
+    models: Optional[Sequence[Any]] = None,
 ) -> Dict[str, Dict[str, Dict[str, Any]]]:
-    """Evaluate the baselines, the NanoPrune model (if given), Laya and the cascade (if given).
+    """Evaluate the baselines, the given models, Laya and the cascade (if given).
 
-    The cascade ablation replaces the NanoPrune score by a constant: 0.5 (only the
+    ``pruner`` / ``models`` are relevance scorers with a ``score`` method
+    (NanoPruner, SemanticScorer...); scorers without a model are skipped.
+    The cascade ablation replaces the tier-1 score by a constant: 0.5 (only the
     lexical gate and Laya remain) and 0.72 (the lexical "rescue" rule also fires).
-    If the real cascade does not beat both, the neural score adds nothing.
+    If the real cascade does not beat both, the tier-1 model adds nothing.
     """
+    candidates = list(models or []) + ([pruner] if pruner is not None else [])
+    loaded = [m for m in candidates if getattr(m, "has_model", False)]
     from .engine.cascade import HybridCascadePruner
 
     report: Dict[str, Dict[str, Dict[str, Any]]] = {}
@@ -325,13 +339,11 @@ def run_standard_evaluation(
             "IDF-weighted coverage": (idf_coverage_scorer(corpus), threshold),
             "BM25 (ranking only)": (bm25_scorer(corpus), None),
         }
-        if pruner is not None and pruner.has_model:
-            scorers[f"NanoPrune model ({pruner.describe().get('model_name')})"] = (pruner.score, threshold)
+        for model in loaded:
+            scorers[_model_label(model, suite_name)] = (model.score, threshold)
         if laya_agent is not None:
             scorers["Laya"] = (laya_scorer(laya_agent), threshold)
-            tier1_variants = []
-            if pruner is not None and pruner.has_model:
-                tier1_variants.append(("cascade (NanoPrune tier-1)", pruner))
+            tier1_variants = [(f"cascade (tier-1: {m.describe().get('model_name')})", m) for m in loaded]
             tier1_variants += [
                 ("cascade, tier-1 = 0.5 (ablation)", _ConstantPruner(0.5)),
                 ("cascade, tier-1 = 0.72 (ablation)", _ConstantPruner(0.72)),

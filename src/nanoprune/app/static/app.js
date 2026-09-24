@@ -83,7 +83,8 @@ async function refreshStatus() {
         "Voir « Getting the weights » dans le README pour installer un modèle.";
       banner.hidden = false;
     } else {
-      tag.textContent = `${model.model_name || "modèle"} · ${state.backend}`;
+      const label = state.backend === "semantic" ? "sémantique" : state.backend;
+      tag.textContent = `${model.model_name || "modèle"} · ${label}`;
       tag.className = "brand-tag is-model";
       banner.hidden = true;
     }

@@ -14,8 +14,9 @@ class LocalSearchEngine:
     """
     Zero-cloud, zero-LLM local search engine.
 
-    Candidate passages are retrieved with BM25, then re-ranked by the NanoPrune
-    relevance model (or its keyword heuristic when no weights are loaded).
+    Candidate passages are retrieved with BM25 (or, for semantic scorers, every
+    passage is considered), then scored by the relevance scorer: a semantic
+    model, the NanoPrune model, or its keyword heuristic when no model is loaded.
     """
     def __init__(
         self,
@@ -56,10 +57,23 @@ class LocalSearchEngine:
                 self._bm25_signature = signature
             return self._bm25
 
+    def prepare(self) -> None:
+        """Build the lexical index and pre-compute passage embeddings (semantic scorers).
+
+        Called after indexing so that the first query does not pay for it.
+        """
+        self._bm25_index()
+        warm = getattr(self.pruner, "warm", None)
+        if warm is not None:
+            warm([chunk.text for chunk in self.indexer.chunks])
+
     def _candidates(self, query: str) -> List[Tuple[int, float]]:
         bm25 = self._bm25_index()
         chunks = self.indexer.chunks
-        if self.pruner.has_model and len(chunks) <= self.full_scan_limit:
+        # Semantic scorers score every passage from cached embeddings, so passages
+        # that share no keyword with the query are found whatever the corpus size.
+        full_scan = getattr(self.pruner, "full_scan", False)
+        if full_scan or (self.pruner.has_model and len(chunks) <= self.full_scan_limit):
             lexical = bm25.scores(query)
             return list(enumerate(lexical))
         return bm25.top_k(query, self.candidate_pool)
