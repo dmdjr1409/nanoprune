@@ -11,5 +11,5 @@ from nanoprune.cli import main
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        sys.argv.extend(["app", "--dir", "sample_data/medical"])
-    main()
+        sys.argv.extend(["app", "--dir", str(Path(__file__).parent / "sample_data" / "medical")])
+    sys.exit(main())

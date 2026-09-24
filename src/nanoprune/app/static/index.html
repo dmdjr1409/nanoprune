@@ -3,503 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NanoPrune — Recherche Confidentielle</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --bg: #0d0e12;
-      --panel: #16181f;
-      --border: #232634;
-      --text: #f3f4f6;
-      --text-muted: #8b92a5;
-      --accent: #3b82f6;
-      --match: #10b981;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 36px 20px;
-      -webkit-font-smoothing: antialiased;
-    }
-    .app-shell {
-      width: 100%;
-      max-width: 780px;
-    }
-    .top-nav {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 15px;
-      font-weight: 600;
-      color: #fff;
-      letter-spacing: -0.2px;
-    }
-    .brand-tag {
-      background: #1f2330;
-      color: var(--text-muted);
-      font-size: 11px;
-      font-weight: 500;
-      padding: 2px 7px;
-      border-radius: 4px;
-      border: 1px solid var(--border);
-    }
-    .nav-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .btn-import {
-      background: #1e2433;
-      border: 1px solid #2d354a;
-      color: #93c5fd;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 12.5px;
-      font-weight: 500;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.15s;
-    }
-    .btn-import:hover {
-      background: #2563eb;
-      color: #fff;
-      border-color: #3b82f6;
-    }
-    .nav-status {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
-    }
-    
-    /* Import Drawer */
-    .import-drawer {
-      display: none;
-      background: var(--panel);
-      border: 1px solid #2e3549;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 24px;
-      animation: fadeIn 0.2s ease-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(-8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .drawer-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 14px;
-      color: #fff;
-      display: flex;
-      justify-content: space-between;
-    }
-    .close-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 16px;
-    }
-    .dropzone {
-      border: 2px dashed #2b3245;
-      border-radius: 8px;
-      padding: 28px 16px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s, background-color 0.2s;
-    }
-    .dropzone:hover, .dropzone.dragover {
-      border-color: var(--accent);
-      background: rgba(59, 130, 246, 0.05);
-    }
-    .dropzone-text {
-      font-size: 13.5px;
-      color: var(--text-muted);
-      margin-bottom: 12px;
-    }
-    .dropzone-text strong {
-      color: #fff;
-    }
-    .path-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 14px;
-    }
-    .path-input {
-      flex: 1;
-      background: #0d0e12;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 8px 12px;
-      color: #fff;
-      font-size: 13px;
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .btn-load-path {
-      background: #222838;
-      border: 1px solid #323b52;
-      color: #fff;
-      padding: 8px 14px;
-      border-radius: 6px;
-      font-size: 13px;
-      cursor: pointer;
-    }
-    .btn-load-path:hover {
-      background: #2a334a;
-    }
-
-    /* Search Box */
-    .search-box {
-      position: relative;
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
-      transition: border-color 0.15s ease, box-shadow 0.15s ease;
-      margin-bottom: 20px;
-    }
-    .search-box:focus-within {
-      border-color: #3b82f6;
-      box-shadow: 0 8px 30px rgba(59, 130, 246, 0.12);
-    }
-    .search-input-wrapper {
-      display: flex;
-      align-items: center;
-      padding: 14px 18px;
-      gap: 12px;
-    }
-    .search-icon {
-      color: #64748b;
-      flex-shrink: 0;
-    }
-    .search-input {
-      flex: 1;
-      background: transparent;
-      border: none;
-      outline: none;
-      color: #fff;
-      font-size: 16px;
-      font-family: inherit;
-    }
-    .search-input::placeholder {
-      color: #525a70;
-    }
-    .search-meta {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 18px 12px 18px;
-      font-size: 12px;
-      color: var(--text-muted);
-      border-top: 1px solid rgba(255, 255, 255, 0.03);
-    }
-    .quick-filters {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .filter-btn {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text-muted);
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      cursor: pointer;
-      font-family: inherit;
-      transition: all 0.15s;
-    }
-    .filter-btn:hover {
-      background: #1f2330;
-      color: #fff;
-      border-color: #3b4256;
-    }
-
-    /* Results */
-    .results {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .result-item {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 16px 18px;
-      transition: border-color 0.15s, background-color 0.15s;
-    }
-    .result-item:hover {
-      border-color: #343a4e;
-      background: #191c24;
-    }
-    .result-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .result-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: #93c5fd;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-family: 'JetBrains Mono', monospace;
-    }
-    .score-badge {
-      font-size: 11px;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(16, 185, 129, 0.1);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.25);
-    }
-    .proof-quote {
-      font-size: 14px;
-      color: #fff;
-      line-height: 1.5;
-      margin-bottom: 8px;
-      padding-left: 10px;
-      border-left: 2px solid #3b82f6;
-    }
-    .proof-quote strong {
-      color: #60a5fa;
-    }
-    .full-context {
-      font-size: 12.5px;
-      color: #80889c;
-      line-height: 1.55;
-    }
-
-    .empty {
-      text-align: center;
-      padding: 40px 20px;
-      color: #555d73;
-      font-size: 13px;
-    }
-  </style>
+  <title>NanoPrune — Recherche locale</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
     <header class="top-nav">
       <div class="brand">
         <span>NanoPrune</span>
-        <span class="brand-tag">v0.4</span>
+        <span class="brand-tag" id="modelTag">…</span>
       </div>
       <div class="nav-actions">
-        <button class="btn-import" onclick="toggleDrawer()">
-          <span>📁</span>
-          <span id="btnImportLabel">Changer de dossier...</span>
+        <button type="button" class="btn-import" id="btnImport" aria-expanded="false" aria-controls="importDrawer">
+          <span aria-hidden="true">📁</span>
+          <span>Changer de dossier…</span>
         </button>
-        <div class="nav-status">
-          <span id="statInfo">Chargement...</span>
-        </div>
+        <span class="nav-status" id="statInfo">Chargement…</span>
       </div>
     </header>
 
-    <!-- Import Drawer / File Selector -->
-    <div id="importDrawer" class="import-drawer">
+    <div id="modeBanner" class="mode-banner" role="status" hidden></div>
+
+    <section id="importDrawer" class="import-drawer" hidden>
       <div class="drawer-title">
-        <span>Importer vos dossiers ou documents</span>
-        <button class="close-btn" onclick="toggleDrawer()">✕</button>
+        <span>Importer des dossiers ou des documents</span>
+        <button type="button" class="close-btn" id="btnCloseDrawer" aria-label="Fermer">✕</button>
       </div>
 
-      <div id="dropzone" class="dropzone" onclick="document.getElementById('fileInput').click()">
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Choisir un dossier à importer">
         <div class="dropzone-text">
-          Glissez-déposez un dossier ou des fichiers ici, ou <strong>cliquez pour parcourir votre Mac</strong>
+          Glissez-déposez un dossier ou des fichiers ici, ou <strong>cliquez pour choisir un dossier</strong>
         </div>
-        <input id="fileInput" type="file" webkitdirectory directory multiple style="display: none;" onchange="handleFilesSelected(this.files)" />
-        <span style="font-size: 11px; color: #64748b;">Formats acceptés : PDF, Word, Markdown, Texte brut, JSON (100% analysé en local)</span>
+        <span class="hint" id="formatsHint"></span>
+      </div>
+      <input id="folderInput" type="file" webkitdirectory multiple hidden>
+      <input id="fileInput" type="file" multiple hidden>
+
+      <div class="picker-row">
+        <button type="button" class="btn-secondary" id="btnPickFiles">Choisir des fichiers…</button>
+        <span class="hint">Tout reste sur cet ordinateur : les fichiers sont lus par le serveur local.</span>
       </div>
 
-      <div class="path-row">
-        <input id="pathInput" class="path-input" type="text" placeholder="Ou entrez un chemin direct (ex: ~/Documents/Clients, sample_data/medical...)" onkeydown="if(event.key==='Enter') loadFolderFromPath()" />
-        <button class="btn-load-path" onclick="loadFolderFromPath()">Charger</button>
-      </div>
-    </div>
+      <form class="path-row" id="pathForm">
+        <input id="pathInput" class="path-input" type="text" autocomplete="off"
+               placeholder="Ou un chemin local (ex : ~/Documents/Clients, sample_data/medical)">
+        <button type="submit" class="btn-load-path">Charger</button>
+      </form>
 
-    <!-- Search Box -->
-    <div class="search-box">
+      <div id="importReport" class="import-report" hidden></div>
+    </section>
+
+    <section class="search-box">
       <div class="search-input-wrapper">
-        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="q" class="search-input" type="text" placeholder="Rechercher dans les dossiers (ex: allergie Dupont, clause de préavis...)" autofocus oninput="debounceSearch()" onkeydown="if(event.key==='Enter') doSearch()" />
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <input id="q" class="search-input" type="search" autocomplete="off" autofocus
+               placeholder="Rechercher dans les documents (ex : allergie Dupont, clause de préavis…)"
+               aria-label="Recherche">
       </div>
       <div class="search-meta">
         <div class="quick-filters">
-          <button class="filter-btn" onclick="applyQuery('Allergie pénicilline Dupont')">Allergie Dupont</button>
-          <button class="filter-btn" onclick="applyQuery('Contre-indication AINS Kardegic')">Contre-indication Martin</button>
-          <button class="filter-btn" onclick="applyQuery('Aucune allergie Sophie Bernard')">Sans allergie Bernard</button>
+          <button type="button" class="filter-btn" data-query="Allergie pénicilline Dupont">Allergie Dupont</button>
+          <button type="button" class="filter-btn" data-query="Contre-indication AINS Kardegic">Contre-indication Martin</button>
+          <button type="button" class="filter-btn" data-query="Aucune allergie Sophie Bernard">Sans allergie Bernard</button>
         </div>
-        <div id="latencyTag">-- ms</div>
+        <label class="threshold" for="threshold">
+          Seuil
+          <input id="threshold" type="range" min="0.20" max="0.95" step="0.05" value="0.45">
+          <output id="thresholdValue" for="threshold">0.45</output>
+        </label>
+        <div id="latencyTag" class="latency">-- ms</div>
       </div>
-    </div>
+    </section>
 
-    <div id="results" class="results">
-      <div class="empty">Tape une requête pour chercher instantanément.</div>
+    <div id="results" class="results" aria-live="polite">
+      <div class="empty">Tape une requête pour chercher dans les documents indexés.</div>
     </div>
   </div>
-
-  <script>
-    let timer = null;
-
-    function toggleDrawer() {
-      const d = document.getElementById('importDrawer');
-      d.style.display = (d.style.display === 'block') ? 'none' : 'block';
-    }
-
-    function applyQuery(val) {
-      document.getElementById('q').value = val;
-      doSearch();
-    }
-
-    function debounceSearch() {
-      clearTimeout(timer);
-      timer = setTimeout(doSearch, 120);
-    }
-
-    function cleanMd(str) {
-      if (!str) return '';
-      return str
-        .replace(/\[([^\]]+)\]/g, '')
-        .replace(/#{1,6}\s+/g, '')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/^\s*[-*]\s+/gm, '')
-        .trim();
-    }
-
-    async function doSearch() {
-      const query = document.getElementById('q').value.trim();
-      const container = document.getElementById('results');
-      if (!query) {
-        container.innerHTML = '<div class="empty">Tape une requête pour chercher instantanément.</div>';
-        document.getElementById('latencyTag').innerText = '-- ms';
-        return;
-      }
-
-      try {
-        const res = await fetch('/api/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: query, threshold: 0.45, top_k: 5 })
-        });
-        const data = await res.json();
-        document.getElementById('latencyTag').innerText = `${data.latency_ms} ms (${data.matches_retained} trouvés)`;
-
-        if (!data.results || data.results.length === 0) {
-          container.innerHTML = '<div class="empty">Aucune preuve pertinente trouvée (rejet du faux positif).</div>';
-          return;
-        }
-
-        container.innerHTML = data.results.map(r => `
-          <div class="result-item">
-            <div class="result-top">
-              <span class="result-title">📄 ${r.file_name}</span>
-              <span class="score-badge">${r.confidence_pct} certifié</span>
-            </div>
-            <div class="proof-quote">${cleanMd(r.highlight)}</div>
-            <div class="full-context">${cleanMd(r.text)}</div>
-          </div>
-        `).join('');
-
-      } catch (err) {
-        container.innerHTML = `<div class="empty">Erreur: ${err.message}</div>`;
-      }
-    }
-
-    async function loadFolderFromPath() {
-      const path = document.getElementById('pathInput').value.trim();
-      if (!path) return;
-
-      const stat = document.getElementById('statInfo');
-      stat.innerText = 'Indexation en cours...';
-
-      try {
-        const res = await fetch('/api/load_folder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folder_path: path })
-        });
-        const data = await res.json();
-        if (data.error) {
-          alert(data.error);
-          stat.innerText = 'Erreur d\'indexation';
-          return;
-        }
-        stat.innerText = `${data.total_chunks} extraits indexés • 100% hors-ligne`;
-        toggleDrawer();
-        doSearch();
-      } catch (e) {
-        alert('Erreur: ' + e.message);
-      }
-    }
-
-    async function handleFilesSelected(fileList) {
-      if (!fileList || fileList.length === 0) return;
-      
-      const stat = document.getElementById('statInfo');
-      stat.innerText = `Lecture de ${fileList.length} fichiers...`;
-
-      const filesData = [];
-      for (const file of fileList) {
-        if (file.name.endsWith('.md') || file.name.endsWith('.txt') || file.name.endsWith('.json') || file.name.endsWith('.csv')) {
-          const text = await file.text();
-          filesData.push({ name: file.name, content: text });
-        }
-      }
-
-      if (filesData.length === 0) {
-        alert('Aucun fichier texte/markdown trouvé dans la sélection.');
-        stat.innerText = 'Prêt';
-        return;
-      }
-
-      stat.innerText = `Indexation de ${filesData.length} fichiers...`;
-      try {
-        const res = await fetch('/api/index_direct', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: filesData })
-        });
-        const data = await res.json();
-        stat.innerText = `${data.total_chunks} extraits indexés • 100% hors-ligne`;
-        toggleDrawer();
-        doSearch();
-      } catch (e) {
-        alert('Erreur d\'import: ' + e.message);
-      }
-    }
-
-    // Drag and Drop
-    const dz = document.getElementById('dropzone');
-    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
-    dz.addEventListener('dragleave', () => { dz.classList.remove('dragover'); });
-    dz.addEventListener('drop', (e) => {
-      e.preventDefault();
-      dz.classList.remove('dragover');
-      handleFilesSelected(e.dataTransfer.files);
-    });
-
-    fetch('/api/status').then(r => r.json()).then(st => {
-      document.getElementById('statInfo').innerText = `${st.indexed_chunks} extraits indexés • 100% hors-ligne`;
-    });
-  </script>
 </body>
 </html>

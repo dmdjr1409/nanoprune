@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nanoprune"
-version = "0.4.0"
-description = "A 5.45M-parameter local System One relevance model and RAG pruner."
+version = "0.5.0"
+description = "Local relevance scoring and RAG context pruning with a small non-generative Transformer."
 readme = "README.md"
 authors = [
     { name = "Junior Diomande", email = "diomandejunior14@hotmail.com" }
 ]
 license = { text = "MIT" }
 requires-python = ">=3.9"
-keywords = ["rag", "reranker", "system-one", "onnx", "pruner", "information-retrieval", "privacy", "local-ai"]
+keywords = ["rag", "reranker", "system-one", "onnx", "pruner", "information-retrieval", "privacy", "local-ai", "bm25"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -25,6 +25,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Text Processing :: Indexing",
 ]
@@ -33,17 +34,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Inference with the ONNX model (the v0.4+ WordPiece tokenizer needs `tokenizers`).
 onnx = [
     "onnxruntime>=1.15.0",
+    "tokenizers>=0.13.0",
 ]
+# PyTorch inference, training and ONNX export.
 train = [
     "torch>=2.0.0",
     "onnx>=1.14.0",
+    "onnxruntime>=1.15.0",
+    "tokenizers>=0.13.0",
+]
+# PDF indexing in the local search app (.docx needs nothing extra).
+docs = [
+    "pypdf>=3.0.0",
 ]
 all = [
-    "onnxruntime>=1.15.0",
     "torch>=2.0.0",
     "onnx>=1.14.0",
+    "onnxruntime>=1.15.0",
+    "tokenizers>=0.13.0",
+    "pypdf>=3.0.0",
 ]
 
 [project.scripts]
@@ -53,3 +65,9 @@ nanoprune = "nanoprune.cli:main"
 Homepage = "https://github.com/dmdjr1409/nanoprune"
 Repository = "https://github.com/dmdjr1409/nanoprune"
 Issues = "https://github.com/dmdjr1409/nanoprune/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nanoprune = ["app/static/*", "benchmarks/*.jsonl", "benchmarks/*.md"]

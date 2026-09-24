@@ -1,11 +1,18 @@
 """NanoPrune: local System One relevance scoring and RAG pruning."""
+__version__ = "0.5.0"
+
 from .core.tokenizer import NanoTokenizer
 from .core.calibration import compute_ece, TemperatureScaler
 from .engine.pruner import NanoPruner
 from .engine.indexer import LocalDocumentIndexer, DocumentChunk
 from .engine.search import LocalSearchEngine
-
-__version__ = "0.4.0"
+from .engine.lexical import BM25Index
+from .errors import (
+    HeadUnavailableError,
+    ModelNotFoundError,
+    NanoPruneWarning,
+    TokenizerMismatchError,
+)
 
 __all__ = [
     "NanoTokenizer",
@@ -15,5 +22,10 @@ __all__ = [
     "LocalDocumentIndexer",
     "DocumentChunk",
     "LocalSearchEngine",
+    "BM25Index",
+    "HeadUnavailableError",
+    "ModelNotFoundError",
+    "NanoPruneWarning",
+    "TokenizerMismatchError",
     "__version__",
 ]
