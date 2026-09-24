@@ -19,7 +19,7 @@ It borrows the "System One" idea of [Jev](https://www.firecrawl.dev/blog/what-is
 | | |
 | --- | --- |
 | **Semantic search** (multilingual-e5-large, int8, 552 MB) | ✅ **85 % accuracy on the held-out suite** (AUC 0.93), finds 45/50 paraphrased passages; recommended mode |
-| Local search app, CLI, evaluation, training pipeline | ✅ working and tested (116 unit tests) |
+| Local search app, CLI, evaluation, training pipeline | ✅ working and tested (119 unit tests) |
 | Model **v0.4** (5.45M parameters, WordPiece) | ⚠️ weights are **not published**: they exist only on the author's machine; recorded accuracy on the dev suite was 60 % |
 | Published model **v0.3** (release assets) | ❌ does not separate relevant from irrelevant passages: 46 % on the dev suite (AUC 0.52), 43 % on the held-out suite; its `.onnx` asset lacks its `.onnx.data` file |
 | No weights installed | NanoPrune runs a **keyword heuristic** and says so everywhere (CLI warning, `backend: heuristic`, banner in the app) |
@@ -74,6 +74,8 @@ A model trained with the WordPiece tokenizer must be shipped with it: NanoPrune 
 python scripts/package_release.py --pt weights/nanoprune-v0.4.pt \
     --tokenizer data/tokenizer_legal.json --name nanoprune-v0.4 --tag v0.4.0
 ```
+
+**Publishing a version (maintainers).** Set the version in `pyproject.toml` and `nanoprune/__init__.py`, add its section to `CHANGELOG.md`, merge, then push a `vX.Y.Z` tag (or run the *release* workflow from the Actions tab with the version number). The workflow checks that the three agree, builds and tests the wheel and the sdist, and publishes the GitHub release with the changelog section as notes.
 
 ---
 

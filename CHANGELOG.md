@@ -35,8 +35,13 @@ The local search app, reworked for everyday use.
   `LocalDocumentIndexer.index_directory`, `DenseEncoder.encode` and
   `LocalSearchEngine.prepare`, `OperationCancelled`,
   `SemanticScorer.embed` / `score_embeddings`, `SemanticScorer.load(disk_cache=True)`.
-- 19 new tests (116 in total): background jobs, cancellation, file opening,
-  grouping and quote selection, the disk store, the CLI options.
+- Release workflow: pushing a `vX.Y.Z` tag, or running the workflow with the
+  version, checks that the version matches the package and this changelog,
+  builds and checks the wheel and the sdist, and publishes the GitHub release
+  with this changelog section as notes (`scripts/release_notes.py`).
+- 22 new tests (119 in total): background jobs, cancellation, file opening,
+  grouping and quote selection, the disk store, the CLI options, the release
+  notes.
 
 ### Changed
 
