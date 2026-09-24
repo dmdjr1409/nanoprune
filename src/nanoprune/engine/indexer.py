@@ -1,9 +1,14 @@
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
+from ..errors import OperationCancelled
 from .extractors import SUPPORTED_SUFFIXES, MissingDependencyError, extract_text
+
+# progress(done, total) and should_stop() callbacks of long operations.
+ProgressCallback = Callable[[int, int], None]
+StopCallback = Callable[[], bool]
 
 # Directories never worth indexing (VCS metadata, dependencies, caches).
 SKIP_DIRS = {
@@ -103,34 +108,57 @@ class LocalDocumentIndexer:
         self.chunks.clear()
         self.version += 1
 
-    def index_directory(self, dir_path: str, recursive: bool = True) -> int:
+    def index_directory(
+        self,
+        dir_path: str,
+        recursive: bool = True,
+        progress: Optional[ProgressCallback] = None,
+        should_stop: Optional[StopCallback] = None,
+    ) -> int:
         """Index every supported file under ``dir_path``; returns the number of files indexed.
 
         Hidden directories and dependency/cache folders are skipped, files larger
         than ``max_file_bytes`` are ignored and at most ``max_files`` files are read.
         Details are stored in ``last_report``.
+
+        ``progress(files_done, files_total)`` is called after each file, and
+        ``should_stop()`` is polled between files: when it returns True,
+        ``OperationCancelled`` is raised (passages already added stay indexed).
         """
         target = Path(dir_path).expanduser()
         if not target.exists() or not target.is_dir():
             raise ValueError(f"Directory does not exist: {dir_path}")
 
-        report: Dict[str, Any] = {"files_indexed": 0, "skipped": [], "truncated": False}
+        # List first, so that progress can be reported against a total.
+        paths: List[Path] = []
         for path in self._walk(target, recursive):
-            if report["files_indexed"] >= self.max_files:
-                report["truncated"] = True
+            if should_stop is not None and should_stop():
+                raise OperationCancelled("Indexing cancelled")
+            paths.append(path)
+            if len(paths) > self.max_files:
                 break
+        report: Dict[str, Any] = {"files_indexed": 0, "skipped": [], "truncated": len(paths) > self.max_files}
+        paths = paths[:self.max_files]
+        self.last_report = report
+        if progress is not None:
+            progress(0, len(paths))
+
+        for done, path in enumerate(paths, 1):
+            if should_stop is not None and should_stop():
+                raise OperationCancelled("Indexing cancelled")
             try:
                 if path.stat().st_size > self.max_file_bytes:
                     report["skipped"].append((str(path), "file too large"))
-                    continue
-                rel = path.relative_to(target).as_posix()
-                self.index_file(str(path), chunk_prefix=rel)
-                report["files_indexed"] += 1
+                else:
+                    rel = path.relative_to(target).as_posix()
+                    self.index_file(str(path), chunk_prefix=rel)
+                    report["files_indexed"] += 1
             except MissingDependencyError as exc:
                 report["skipped"].append((str(path), str(exc)))
             except (OSError, ValueError, KeyError) as exc:
                 report["skipped"].append((str(path), f"unreadable: {exc}"))
-        self.last_report = report
+            if progress is not None:
+                progress(done, len(paths))
         return report["files_indexed"]
 
     @staticmethod
@@ -191,7 +219,7 @@ class LocalDocumentIndexer:
                 parts.append(segment)
             return "".join(parts)
 
-        def emit(body: str, line_start: int, line_end: int) -> None:
+        def emit(body: str, line_start: int, line_end: int, shared: int = 0) -> None:
             result.append(DocumentChunk(
                 chunk_id=f"{id_prefix}#{len(result)}",
                 file_path=file_path,
@@ -200,6 +228,8 @@ class LocalDocumentIndexer:
                 body=body,
                 line_start=line_start,
                 line_end=line_end,
+                # Characters at the start of the body repeated from the previous passage.
+                metadata={"shared_prev": shared} if shared else None,
             ))
 
         for first_line, last_line, para in _paragraphs(text):
@@ -223,10 +253,11 @@ class LocalDocumentIndexer:
                     units.append((line, segment))
 
             current: List[Tuple[int, str]] = []
+            shared = 0
             for unit in units:
                 length = sum(len(s) + 1 for _, s in current)
                 if current and length + len(unit[1]) > budget:
-                    emit(join(current), current[0][0], current[-1][0])
+                    emit(join(current), current[0][0], current[-1][0], shared)
                     # Carry trailing units into the next passage, up to chunk_overlap characters.
                     overlap: List[Tuple[int, str]] = []
                     carried = 0
@@ -236,8 +267,9 @@ class LocalDocumentIndexer:
                         overlap.insert(0, prev)
                         carried += len(prev[1]) + 1
                     current = overlap
+                    shared = len(join(overlap))
                 current.append(unit)
             if current:
-                emit(join(current), current[0][0], current[-1][0])
+                emit(join(current), current[0][0], current[-1][0], shared)
 
         return result

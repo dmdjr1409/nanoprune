@@ -1,5 +1,5 @@
 """NanoPrune: local relevance scoring, semantic search and RAG context pruning."""
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 from .core.tokenizer import NanoTokenizer
 from .core.calibration import compute_ece, TemperatureScaler

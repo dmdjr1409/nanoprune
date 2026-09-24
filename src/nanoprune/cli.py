@@ -11,6 +11,18 @@ from .errors import HeadUnavailableError, ModelNotFoundError, NanoPruneWarning, 
 
 REPO_SAMPLE_DIR = Path(__file__).resolve().parent.parent.parent / "sample_data" / "medical"
 
+QUICK_START = """
+Démarrage rapide :
+  nanoprune app                                   interface locale dans le navigateur
+  nanoprune app --dir ~/Documents/Dossiers        ... sur un dossier précis
+  nanoprune search "délai de préavis" --dir ~/Documents
+  nanoprune download --dense multilingual-e5-large
+                                                  recherche sémantique (550 Mo, une seule fois)
+  nanoprune info                                  modèle utilisé et où il a été trouvé
+
+Tout tourne en local : aucune donnée ne quitte l'ordinateur.
+"""
+
 
 def _dense_requested(args):
     """The semantic model to use: --dense, $NANOPRUNE_DENSE_MODEL or an installed one (unless --model/--no-dense)."""
@@ -23,18 +35,19 @@ def _dense_requested(args):
     return None
 
 
-def _load_pruner(args, threshold: float = 0.70):
+def _load_pruner(args, threshold: float = 0.70, disk_cache: bool = False):
     """Load the scorer requested on the command line and report what is running.
 
     A semantic model (``--dense``, or one installed with ``nanoprune download
     --dense``) takes precedence; ``--model`` forces a NanoPrune checkpoint.
+    ``disk_cache`` keeps passage embeddings on disk (folder searches).
     """
     if getattr(args, "dense", None) is not None and getattr(args, "model", None) is not None:
         raise ValueError("Use either --dense (semantic model) or --model (NanoPrune checkpoint), not both.")
     dense = _dense_requested(args)
     if dense is not None:
         from .engine.dense import SemanticScorer
-        return SemanticScorer.load(dense, threshold=threshold)
+        return SemanticScorer.load(dense, threshold=threshold, disk_cache=disk_cache)
     return _load_nanoprune(args, threshold)
 
 
@@ -75,28 +88,72 @@ def cmd_app(args) -> int:
         sample_dir = Path(args.dir)
     else:
         sample_dir = REPO_SAMPLE_DIR if REPO_SAMPLE_DIR.is_dir() else None
-    run_app(port=args.port, sample_data_dir=sample_dir, pruner=_load_pruner(args))
+    run_app(port=args.port, sample_data_dir=sample_dir, pruner=_load_pruner(args, disk_cache=True),
+            open_browser=not args.no_browser)
     return 0
+
+
+class _Progress:
+    """One-line progress on stderr, only when it is a terminal."""
+
+    def __init__(self, label: str):
+        self.label = label
+        self.enabled = sys.stderr.isatty()
+        self.shown = False
+
+    def __call__(self, done: int, total: int) -> None:
+        if self.enabled and total:
+            sys.stderr.write(f"\r{self.label} : {done}/{total}")
+            sys.stderr.flush()
+            self.shown = True
+
+    def close(self) -> None:
+        if self.shown:
+            sys.stderr.write("\r\033[K")
+            sys.stderr.flush()
 
 
 def cmd_search(args) -> int:
     from .engine.indexer import LocalDocumentIndexer
     from .engine.search import LocalSearchEngine
 
-    pruner = _load_pruner(args)
+    pruner = _load_pruner(args, disk_cache=True)
     indexer = LocalDocumentIndexer()
-    count = indexer.index_directory(args.dir)
+    progress = _Progress("Lecture des fichiers")
+    try:
+        count = indexer.index_directory(args.dir, progress=progress)
+    finally:
+        progress.close()
+    engine = LocalSearchEngine(indexer=indexer, pruner=pruner)
+    progress = _Progress("Analyse sémantique des extraits")
+    try:
+        engine.prepare(progress=progress)
+    finally:
+        progress.close()
+    res = engine.search(args.query, top_k=args.top_k, threshold=args.threshold)
+    if args.json:
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return 0
+
     skipped = len(indexer.last_report.get("skipped", []))
     print(f"Indexé {count} fichiers ({len(indexer.chunks)} extraits) depuis '{args.dir}'"
           + (f", {skipped} ignorés." if skipped else "."))
     print(_backend_line(pruner))
-    engine = LocalSearchEngine(indexer=indexer, pruner=pruner)
-    res = engine.search(args.query, top_k=args.top_k, threshold=args.threshold)
-    print(f"\n⚡ Résultat en {res['latency_ms']} ms ({len(res['results'])} correspondances) :")
+    more = f" sur {res['matches_total']}" if res["more_available"] else ""
+    print(f"\n⚡ Résultat en {res['latency_ms']} ms ({len(res['results'])}{more} correspondances) :")
     for idx, r in enumerate(res["results"], 1):
         lines = f"{r['line_start']}" if r["line_start"] == r["line_end"] else f"{r['line_start']}-{r['line_end']}"
-        print(f"\n[{idx}] {r['file_name']}:{lines} — {_score_label(pruner)} : {r['score_pct']}")
+        print(f"\n[{idx}] {r['rel_path']}:{lines} — {_score_label(pruner)} : {r['score_pct']}")
         print(f"    Extrait : \"{r['highlight']}\"")
+    if not res["results"]:
+        if res["near_misses"]:
+            best = res["near_misses"][0]
+            print(f"\nAucun passage au-dessus du seuil {args.threshold}. Le plus proche : "
+                  f"{best['rel_path']}:{best['line_start']} ({best['score_pct']}). Essayez --threshold "
+                  f"{max(0.05, round(best['score'] - 0.05, 2))}.")
+        elif pruner.backend == "heuristic":
+            print("\nAucun passage trouvé. En mode mots-clés, utilisez des mots présents dans les documents, ou "
+                  "installez la recherche sémantique : nanoprune download --dense multilingual-e5-large")
     return 0
 
 
@@ -157,6 +214,11 @@ def cmd_info(args) -> int:
         print(f"  {path}")
     if not installed_dense_models():
         print("  aucun (nanoprune download --dense multilingual-e5-large)")
+    embeddings = cache_dir() / "embeddings"
+    stores = sorted(embeddings.glob("*.sqlite3")) if embeddings.is_dir() else []
+    size = sum(path.stat().st_size for path in stores)
+    print(f"\nCache des vecteurs ({embeddings}) : {len(stores)} fichier(s), {size / 1e6:.1f} Mo"
+          " — NANOPRUNE_DISK_CACHE=0 pour le désactiver, supprimez le dossier pour l'effacer")
     print(f"\nNANOPRUNE_HOME={nanoprune_home() or '(non défini)'} ; cache={cache_dir()}")
     return 0
 
@@ -225,7 +287,9 @@ def cmd_eval(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="nanoprune",
-        description="NanoPrune: local System One relevance scoring and RAG pruning.",
+        description="NanoPrune : recherche locale et élagage de contexte RAG (score de pertinence, sans LLM).",
+        epilog=QUICK_START,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"nanoprune {__version__}")
 
@@ -244,6 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
     app_parser = subparsers.add_parser("app", parents=[model_args], help="Lancer l'interface locale confidentielle")
     app_parser.add_argument("--port", type=int, default=7860, help="Port du serveur local (défaut : 7860)")
     app_parser.add_argument("--dir", type=str, default=None, help="Dossier de documents à pré-charger")
+    app_parser.add_argument("--no-browser", action="store_true", help="Ne pas ouvrir le navigateur automatiquement")
     app_parser.set_defaults(func=cmd_app)
 
     search_parser = subparsers.add_parser("search", parents=[model_args], help="Rechercher un passage dans un dossier")
@@ -251,6 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("--dir", type=str, default=".", help="Dossier à analyser (défaut : courant)")
     search_parser.add_argument("--threshold", type=float, default=0.50, help="Score minimal (0.0 à 1.0)")
     search_parser.add_argument("--top-k", type=int, default=5, help="Nombre maximal de résultats")
+    search_parser.add_argument("--json", action="store_true", help="Afficher la réponse complète en JSON")
     search_parser.set_defaults(func=cmd_search)
 
     prune_parser = subparsers.add_parser("prune", parents=[model_args], help="Élaguer des textes par rapport à une requête")

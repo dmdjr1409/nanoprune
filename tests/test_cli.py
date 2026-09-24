@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -61,6 +62,30 @@ class TestCli(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("patient_dupont_marc.md:", out)
         self.assertIn("Score mots-clés", out)
+
+    def test_search_json(self):
+        code, out, _ = self.run_cli("search", "Allergie pénicilline Dupont", "--dir", str(SAMPLE_DIR), "--json")
+        self.assertEqual(code, 0)
+        response = json.loads(out)
+        self.assertEqual(response["results"][0]["rel_path"], "patient_dupont_marc.md")
+        self.assertIn("near_misses", response)
+
+    def test_search_explains_empty_results(self):
+        code, out, _ = self.run_cli("search", "xylophone", "--dir", str(SAMPLE_DIR))
+        self.assertEqual(code, 0)
+        self.assertIn("nanoprune download --dense", out)
+
+    def test_app_options(self):
+        from nanoprune.cli import build_parser
+        args = build_parser().parse_args(["app", "--no-browser", "--port", "0"])
+        self.assertTrue(args.no_browser)
+        with mock.patch("nanoprune.app.server.run_app") as run_app:
+            self.assertEqual(self.run_cli("app", "--no-browser", "--dir", str(SAMPLE_DIR))[0], 0)
+        self.assertFalse(run_app.call_args.kwargs["open_browser"])
+        self.assertEqual(run_app.call_args.kwargs["sample_data_dir"], SAMPLE_DIR)
+
+    def test_help_has_a_quick_start(self):
+        self.assertIn("Démarrage rapide", self.run_cli("--help")[1])
 
     def test_search_missing_directory(self):
         code, _, err = self.run_cli("search", "x", "--dir", "/definitely/not/here")

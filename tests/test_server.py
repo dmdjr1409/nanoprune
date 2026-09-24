@@ -2,12 +2,18 @@ import base64
 import http.client
 import json
 import sys
+import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
+import numpy as np
+
 from nanoprune.app.server import CONTENT_SECURITY_POLICY, make_server
+from nanoprune.engine.indexer import DocumentChunk
 from nanoprune.engine.pruner import NanoPruner
+from nanoprune.errors import OperationCancelled
 
 sys.path.insert(0, str(Path(__file__).parent))
 from test_indexer import make_docx  # noqa: E402
@@ -15,11 +21,18 @@ from test_indexer import make_docx  # noqa: E402
 SAMPLE_DIR = Path(__file__).parent.parent / "sample_data" / "medical"
 
 
-class TestServer(unittest.TestCase):
+class ServerTestCase(unittest.TestCase):
+    sample_dir = SAMPLE_DIR
+
+    @classmethod
+    def make_pruner(cls):
+        return NanoPruner(model_path=None)
+
     @classmethod
     def setUpClass(cls):
-        cls.server = make_server(port=0, sample_data_dir=SAMPLE_DIR, pruner=NanoPruner(model_path=None),
-                                 log_requests=False)
+        cls.opened = []
+        cls.server = make_server(port=0, sample_data_dir=cls.sample_dir, pruner=cls.make_pruner(),
+                                 log_requests=False, opener=cls.opened.append)
         cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -48,6 +61,20 @@ class TestServer(unittest.TestCase):
     def post_json(self, path, body, **headers):
         return self.request("POST", path, body, {"Content-Type": "application/json", **headers})
 
+    def status(self):
+        return json.loads(self.request("GET", "/api/status")[1])
+
+    def wait_for_job(self, timeout=10.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            job = self.status()["job"]
+            if job and job["state"] != "running":
+                return job
+            time.sleep(0.02)
+        self.fail("the import did not finish")
+
+
+class TestServer(ServerTestCase):
     # ------------------------------------------------------------------ happy path
 
     def test_page_is_served_with_security_headers(self):
@@ -58,6 +85,10 @@ class TestServer(unittest.TestCase):
         self.assertIsNone(resp.getheader("Access-Control-Allow-Origin"))
         self.assertNotIn(b"onclick", body)
         self.assertNotIn(b"googleapis", body)
+        # Everything the CSP would block: inline styles and scripts.
+        self.assertNotIn(b"style=", body)
+        self.assertNotIn(b"<style", body)
+        self.assertEqual(body.count(b"<script"), body.count(b'<script src="/app.js">'))
 
     def test_static_assets(self):
         for path in ("/app.js", "/app.css"):
@@ -143,25 +174,177 @@ class TestServer(unittest.TestCase):
             {"name": "contrat.docx", "data_base64": base64.b64encode(make_docx(["Clause de préavis de trois mois."])).decode()},
             {"name": "virus.exe", "content": "MZ"},
             {"name": "broken.docx", "data_base64": "***"},
+            {"name": "vide.txt", "content": "   "},
         ]
         try:
-            resp, body = self.post_json("/api/index_direct", {"files": files})
+            resp, body = self.post_json("/api/index_direct", {"files": files, "wait": True})
             report = json.loads(body)
             self.assertEqual(resp.status, 200)
             self.assertEqual(report["files_indexed"], 3)
-            self.assertEqual(report["skipped_count"], 2)
+            self.assertEqual(report["skipped_count"], 3)
+            self.assertIn({"file": "vide.txt", "reason": "aucun texte lisible"}, report["skipped"])
             self.assertGreaterEqual(report["total_chunks"], 4)
+            self.assertEqual(report["job"]["state"], "done")
+            self.assertFalse(self.status()["is_sample"])
 
             resp, body = self.post_json("/api/search", {"query": "allergie latex", "threshold": 0.3})
-            self.assertEqual(json.loads(body)["results"][0]["file_name"], "note.md")
+            top = json.loads(body)["results"][0]
+            self.assertEqual(top["file_name"], "note.md")
+            self.assertFalse(top["can_open"])  # uploaded: no file on disk
+            resp, body = self.post_json("/api/open", {"chunk_id": top["chunk_id"]})
+            self.assertEqual(resp.status, 400)
             resp, body = self.post_json("/api/search", {"query": "clause de préavis", "threshold": 0.3})
             self.assertEqual(json.loads(body)["results"][0]["file_name"], "contrat.docx")
         finally:
-            self.post_json("/api/load_folder", {"folder_path": str(SAMPLE_DIR)})
+            self.post_json("/api/load_folder", {"folder_path": str(SAMPLE_DIR), "wait": True})
+
+    def test_background_folder_import(self):
+        resp, body = self.post_json("/api/load_folder", {"folder_path": str(SAMPLE_DIR)})
+        self.assertEqual(resp.status, 202)
+        self.assertEqual(json.loads(body)["job"]["kind"], "folder")
+        job = self.wait_for_job()
+        self.assertEqual(job["state"], "done")
+        self.assertEqual(job["report"]["files_indexed"], 3)
+        self.assertEqual(job["done"], job["total"])
+        status = self.status()
+        self.assertEqual(status["status"], "ready")
+        self.assertEqual(status["files_indexed"], 3)
+        self.assertTrue(status["is_sample"])
+
+    def test_open_file_of_a_result(self):
+        resp, body = self.post_json("/api/search", {"query": "Allergie pénicilline Dupont", "threshold": 0.45})
+        top = json.loads(body)["results"][0]
+        self.assertTrue(top["can_open"])
+        self.assertEqual(top["rel_path"], "patient_dupont_marc.md")
+        del self.opened[:]
+        resp, body = self.post_json("/api/open", {"chunk_id": top["chunk_id"]})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(self.opened, [str((SAMPLE_DIR / "patient_dupont_marc.md").resolve())])
+        resp, _ = self.post_json("/api/open", {"chunk_id": "../../etc/passwd#0"})
+        self.assertEqual(resp.status, 404)
+        self.assertEqual(len(self.opened), 1)
+
+    def test_open_needs_a_desktop_and_a_document(self):
+        context = self.server.RequestHandlerClass.context
+        resp, body = self.post_json("/api/search", {"query": "Allergie pénicilline Dupont", "threshold": 0.45})
+        top = json.loads(body)["results"][0]
+        opener, context.opener = context.opener, None  # headless machine
+        try:
+            resp, body = self.post_json("/api/search", {"query": "Allergie pénicilline Dupont", "threshold": 0.45})
+            self.assertFalse(json.loads(body)["results"][0]["can_open"])
+            resp, body = self.post_json("/api/open", {"chunk_id": top["chunk_id"]})
+            self.assertEqual(resp.status, 500)
+            self.assertIn("session graphique", json.loads(body)["error"])
+        finally:
+            context.opener = opener
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "script.sh"
+            script.write_text("echo owned", encoding="utf-8")
+            link = Path(tmp) / "note.md"
+            link.symlink_to(script)
+            document = Path(tmp) / "vrai.md"
+            document.write_text("Un document.", encoding="utf-8")
+
+            def chunk(path):
+                return DocumentChunk(f"{path.name}#0", str(path), path.name, "x")
+
+            self.assertIsNone(context._file_of(chunk(link)))  # a ".md" link to a script is never opened
+            self.assertEqual(context._file_of(chunk(document)), document.resolve())
+
+    def test_synchronous_helpers(self):
+        context = self.server.RequestHandlerClass.context
+        report = context.load_directory(str(SAMPLE_DIR))
+        self.assertEqual(report["files_indexed"], 3)
+
+    def test_cancel_without_import_is_harmless(self):
+        resp, body = self.post_json("/api/cancel", {})
+        self.assertEqual(resp.status, 200)
+        self.assertEqual(json.loads(body)["status"], "idle")
 
     def test_import_requires_files(self):
         resp, _ = self.post_json("/api/index_direct", {"files": []})
         self.assertEqual(resp.status, 400)
+
+
+class BlockingScorer:
+    """A semantic-like scorer whose embedding step waits until released (or cancelled)."""
+
+    backend = "semantic"
+    has_model = True
+    full_scan = True
+    threshold = 0.5
+
+    def __init__(self):
+        self.release = threading.Event()
+        self.release.set()
+        self.started = threading.Event()
+        self.fail = False
+
+    def embed(self, passages, progress=None, should_stop=None):
+        self.started.set()
+        if self.fail:
+            raise RuntimeError("model crashed")
+        while not self.release.is_set():
+            if should_stop is not None and should_stop():
+                raise OperationCancelled("cancelled")
+            time.sleep(0.01)
+        if progress is not None:
+            progress(len(passages), len(passages))
+        return np.ones((len(passages), 2), dtype=np.float32)
+
+    def score_embeddings(self, query, matrix):
+        return np.full(len(matrix), 0.9)
+
+    def score(self, query, candidates):
+        return [0.9] * len(candidates)
+
+    def describe(self):
+        return {"backend": "semantic", "model_name": "blocking"}
+
+
+class TestImportJobs(ServerTestCase):
+    @classmethod
+    def make_pruner(cls):
+        cls.scorer = BlockingScorer()
+        return cls.scorer
+
+    def setUp(self):
+        self.scorer.release.set()
+        self.scorer.started.clear()
+        self.scorer.fail = False
+
+    def test_cancel_keeps_the_previous_index(self):
+        before = self.status()
+        self.assertEqual(before["files_indexed"], 3)
+        self.scorer.release.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "autre.md").write_text("Un tout autre document.", encoding="utf-8")
+            resp, _ = self.post_json("/api/load_folder", {"folder_path": tmp})
+            self.assertEqual(resp.status, 202)
+            self.assertTrue(self.scorer.started.wait(5))
+            status = self.status()
+            self.assertEqual(status["status"], "indexing")
+            self.assertEqual(status["job"]["phase"], "embedding")
+
+            # One import at a time; the previous index stays searchable meanwhile.
+            resp, _ = self.post_json("/api/load_folder", {"folder_path": tmp})
+            self.assertEqual(resp.status, 409)
+            resp, body = self.post_json("/api/search", {"query": "allergie", "threshold": 0.5})
+            self.assertTrue(json.loads(body)["results"])
+
+            resp, body = self.post_json("/api/cancel", {})
+            self.assertEqual(json.loads(body)["status"], "cancelling")
+            self.assertEqual(self.wait_for_job()["state"], "cancelled")
+        after = self.status()
+        self.assertEqual(after["indexed_chunks"], before["indexed_chunks"])
+        self.assertEqual(after["current_folder"], before["current_folder"])
+
+    def test_failed_import_is_reported(self):
+        self.scorer.fail = True
+        resp, body = self.post_json("/api/load_folder", {"folder_path": str(SAMPLE_DIR), "wait": True})
+        self.assertEqual(resp.status, 500)
+        self.assertIn("model crashed", json.loads(body)["error"])
+        self.assertEqual(self.status()["job"]["state"], "error")
 
 
 if __name__ == "__main__":

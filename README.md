@@ -2,13 +2,15 @@
 
 > **Local relevance scoring, semantic search and RAG context pruning, 100 % offline, plus a private local search app.**
 
-[![Version](https://img.shields.io/badge/version-0.6.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.7.0-blue.svg)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 NanoPrune scores how relevant a passage is to a query (a probability in `[0, 1]`) and drops the passages below a threshold. It does not generate text. You put it in front of a larger model, so that only useful context reaches it (RAG), or you use it to search your own documents without sending them anywhere.
 
 Two scorers are available: a **semantic model** (a pretrained multilingual sentence-embedding model run with ONNX, recommended) and the small **NanoPrune** Transformer. Without either, a keyword heuristic is used and flagged as such.
+
+![The NanoPrune search app: a question worded differently from the document finds the prescription passage](docs/app-screenshot.png)
 
 It borrows the "System One" idea of [Jev](https://www.firecrawl.dev/blog/what-is-jev) (TypeSafe AI): typed decisions such as `choice`, `score` and `noul` (a yes/no probability) instead of prose. [Laya](https://huggingface.co/convaiinnovations/laya) (Convai, 421M parameters, ModernBERT-large) is an open, Jev-compatible model. NanoPrune is a much smaller model for the relevance case, and it can serve as the fast first tier of a cascade with Laya.
 
@@ -17,7 +19,7 @@ It borrows the "System One" idea of [Jev](https://www.firecrawl.dev/blog/what-is
 | | |
 | --- | --- |
 | **Semantic search** (multilingual-e5-large, int8, 552 MB) | ✅ **85 % accuracy on the held-out suite** (AUC 0.93), finds 45/50 paraphrased passages; recommended mode |
-| Local search app, CLI, evaluation, training pipeline | ✅ working and tested (97 unit tests) |
+| Local search app, CLI, evaluation, training pipeline | ✅ working and tested (116 unit tests) |
 | Model **v0.4** (5.45M parameters, WordPiece) | ⚠️ weights are **not published**: they exist only on the author's machine; recorded accuracy on the dev suite was 60 % |
 | Published model **v0.3** (release assets) | ❌ does not separate relevant from irrelevant passages: 46 % on the dev suite (AUC 0.52), 43 % on the held-out suite; its `.onnx` asset lacks its `.onnx.data` file |
 | No weights installed | NanoPrune runs a **keyword heuristic** and says so everywhere (CLI warning, `backend: heuristic`, banner in the app) |
@@ -46,7 +48,7 @@ pip install -e ".[docs]"     # PDF indexing in the search app (.docx needs nothi
 ```bash
 pip install -e ".[semantic]"
 nanoprune download --dense multilingual-e5-large   # 1.3 GB download, int8-quantised to 552 MB, calibrated
-nanoprune app --dir ~/Documents/Clients            # uses the semantic model automatically
+nanoprune app --dir ~/Documents/Clients            # opens the browser; uses the semantic model automatically
 ```
 
 The archive is the ONNX export of [intfloat/multilingual-e5-large](https://huggingface.co/intfloat/multilingual-e5-large) (MIT licence) mirrored by the fastembed project; its SHA-256 is pinned in `nanoprune/engine/dense.py`. Once installed, `search`, `prune`, `app` and `eval` use it by default; `--no-dense` or `--model` switch back to NanoPrune.
@@ -100,14 +102,28 @@ scorer = SemanticScorer.load()      # installed semantic model; same score/prune
 print(scorer.prune("Refund policy", ["30-day money back guarantee", "Opening hours: 9am-5pm"]))
 ```
 
+Searching a folder from Python:
+
+```python
+from nanoprune import LocalDocumentIndexer, LocalSearchEngine, SemanticScorer
+
+indexer = LocalDocumentIndexer()
+indexer.index_directory("sample_data/medical", progress=lambda done, total: print(done, "/", total))
+engine = LocalSearchEngine(indexer, SemanticScorer.load(disk_cache=True))
+engine.prepare()                    # embeds every passage once (cached on disk)
+response = engine.search("Que prendre pour une douleur au genou ?", top_k=5, threshold=0.5)
+for r in response["results"]:       # also: near_misses, matches_total, more_available
+    print(f"{r['score']:.0%} {r['rel_path']}:{r['line_start']} {r['highlight']}")
+```
+
 `score`, `score_pair`, `prune` and `rank` work with every backend. `choice` and `score_rubric` need a trained head (PyTorch checkpoint, or ONNX exported with all heads) and raise `HeadUnavailableError` otherwise, instead of returning made-up values. In v0.4, `choice` only knows its four training categories (options are mapped to them by position), and the `score` head is not trained.
 
 ## CLI
 
 ```bash
-nanoprune search "Contre-indication AINS" --dir sample_data/medical
+nanoprune search "Contre-indication AINS" --dir sample_data/medical   # add --json for the full response
 nanoprune prune "Refund policy" "30-day money back guarantee" "Opening hours: 9am-5pm"
-nanoprune app --dir sample_data/medical        # local search app on http://127.0.0.1:7860
+nanoprune app --dir sample_data/medical        # local search app on http://127.0.0.1:7860 (--no-browser)
 nanoprune info                                 # loaded model and search paths
 nanoprune eval                                 # baselines (+ model, + Laya with --laya)
 nanoprune download --tag <tag>                 # install published NanoPrune weights
@@ -119,13 +135,24 @@ Every model-using command accepts `--dense PATH|auto`, `--no-dense`, `--model PA
 
 ## Local search app
 
-`nanoprune app` indexes a folder (`.txt .md .json .csv .tsv .log .rst .docx`, plus `.pdf` with `pypdf`) and scores passages with the semantic model when one is installed, otherwise with the NanoPrune model or the keyword heuristic (BM25 then pre-selects candidates). Results show the file, line numbers, the best matching sentence and the score. In semantic mode every passage is embedded once at import time and every query scores all passages, so passages that share no keyword with the query are found (about 25 ms per query on the sample folder; about 28 ms per passage to embed at import, on 4 CPU threads).
+`nanoprune app` starts a server on `127.0.0.1`, opens the page in your browser (`--no-browser` to skip) and indexes the folder given with `--dir` (or the bundled sample) in the background. Passages are scored with the semantic model when one is installed, otherwise with the NanoPrune model or the keyword heuristic (BM25 then pre-selects candidates).
+
+- **Import**: drop a folder or files anywhere on the page, pick them, or type a folder path; with a path, results can open the original files. Formats: `.txt .md .json .csv .tsv .log .rst .docx`, plus `.pdf` with `pypdf`. Imports run in the background with a progress bar, the time left and a *Cancel* button; the previous folder stays searchable until the new one is ready, and skipped files are listed with the reason.
+- **Results**: one card per file with its best passage, the sentence that answers best (query words highlighted), the line numbers and the score; other passages of the same file are folded under it. Each result can be opened with its default application or copied as a citation (« passage » — file, lines). When nothing passes the filter, the closest passages are shown anyway, below it.
+- **Filter**: *Large*, *Normal*, *Strict* keep passages scoring at least 30, 50 or 70 %.
+- **Keyboard**: `/` or `Ctrl+K` search, `↓` `↑` move through the results, `Enter` shows the full passage, `O` opens the file, `C` copies the citation, `Esc` clears, `?` help.
+- Light and dark themes (following the system, with a toggle), and a layout that works in a phone-sized window.
+
+In semantic mode every passage is embedded once and each query scores all of them, so passages that share no keyword with the query are found (25–50 ms per query for a few hundred passages). Embedding takes about 40 ms per passage on 4 CPU threads. The vectors are saved in `~/.cache/nanoprune/embeddings/` (SQLite): a folder already analysed is ready in seconds at the next start, an interrupted import resumes where it stopped, and only new or modified passages are computed. `NANOPRUNE_DISK_CACHE=0` keeps nothing on disk; deleting that folder clears it (`nanoprune info` shows its size).
+
+The page talks to a small same-origin JSON API: `GET /api/status` (index, model, running import), `POST /api/search`, `POST /api/load_folder` and `POST /api/index_direct` (they answer `202` with an import job; add `"wait": true` to get the final report), `POST /api/cancel` and `POST /api/open`.
 
 Files are read and indexed by the local server only. The server:
 
 - listens on `127.0.0.1` only and rejects requests whose `Host` is not that address (blocks DNS rebinding);
 - rejects cross-site requests (`Origin` / `Sec-Fetch-Site`), requires `application/json` bodies, and never sends CORS headers, so other websites open in your browser cannot read your files through it;
 - serves the page with a strict Content-Security-Policy and renders document text as text, so a crafted document cannot run script in the page;
+- opens only files that are part of the current index, with the system's default application and without a shell;
 - loads no third-party resources (no web fonts or CDN).
 
 ## Semantic search
@@ -136,7 +163,7 @@ What it does well, measured on the held-out suite: 50/50 direct answers, 45/50 p
 
 - **lexical traps**: 25/50 passages about another question with the same vocabulary are still accepted;
 - **negation**: "ne supporte pas les antibiotiques" ranks "aucune allergie aux antibiotiques" high; embeddings capture the topic more than the polarity;
-- **one-topic folders**: in a folder of medical records, every record is topically close to a medical query; the ranking stays right, but scores are high, so raise the threshold slider for precision.
+- **one-topic folders**: in a folder of medical records, every record is topically close to a medical query; the ranking stays right, but scores are high, so use the *Strict* filter for precision.
 
 A cross-encoder re-ranker (or Laya) on the top results is the natural next step for traps and negation. Combining the semantic score with keyword scores was tested and *reduced* held-out accuracy (to 60–68 %), because the dev suite rewards shared words.
 

@@ -1,5 +1,57 @@
 # Changelog
 
+## 0.7.0 — 2026-09-24
+
+The local search app, reworked for everyday use.
+
+### Added
+
+- Background imports: a progress bar (files read, passages analysed, time
+  left) and a Cancel button; the previous folder stays searchable until the new
+  index is ready. `POST /api/load_folder` and `/api/index_direct` answer `202`
+  with an import job (`"wait": true` gives the final report as before),
+  `POST /api/cancel` stops it and `GET /api/status` reports it.
+- Embedding cache on disk (`EmbeddingStore`, SQLite under
+  `~/.cache/nanoprune/embeddings`): a folder analysed once is ready in seconds
+  at the next start, an interrupted import resumes where it stopped, and only
+  new or modified passages are computed. `NANOPRUNE_DISK_CACHE=0` disables it.
+- Results grouped by file, with the query words highlighted
+  (`highlight_terms`), the path relative to the indexed folder (`rel_path`),
+  "open the file" (`POST /api/open`: files of the current index only, default
+  application, no shell) and "copy the citation" actions, the closest passages
+  below the filter (`near_misses`), `matches_total` / `more_available` and a
+  "show more" button.
+- Page: onboarding when no folder is loaded, drop files or folders anywhere,
+  Large / Normal / Strict filter, recent searches, example questions on the
+  sample folder, keyboard shortcuts (`/`, `Ctrl+K`, arrows, `Enter`, `O`, `C`,
+  `Esc`, `?`), help panel, light and dark themes, phone-sized layout, and a
+  report of skipped files (unsupported, too large, no readable text).
+- `nanoprune app` answers immediately, indexes in the background and opens the
+  browser on desktop sessions (`--no-browser`). `nanoprune search` shows
+  progress on a terminal, prints paths relative to the folder, explains empty
+  results and has `--json`. `nanoprune --help` starts with a quick start, and
+  `nanoprune info` shows the embedding cache.
+- API: `progress` / `should_stop` callbacks on
+  `LocalDocumentIndexer.index_directory`, `DenseEncoder.encode` and
+  `LocalSearchEngine.prepare`, `OperationCancelled`,
+  `SemanticScorer.embed` / `score_embeddings`, `SemanticScorer.load(disk_cache=True)`.
+- 19 new tests (116 in total): background jobs, cancellation, file opening,
+  grouping and quote selection, the disk store, the CLI options.
+
+### Changed
+
+- The sentence quoted for a result weighs query words by rarity and ignores
+  words found in no document; when no sentence carries enough of the query
+  (typical of semantic matches), the whole passage is quoted instead of a
+  sentence that only shares a common word.
+- A passage that mostly repeats a better-ranked neighbour (chunk overlap) is
+  not listed twice.
+- The search engine keeps the embedding matrix of the index and scores it with
+  one matrix product; `SemanticScorer` is thread-safe, caches query vectors,
+  sorts batches by length (less padding) and keeps 20,000 passages in memory
+  (the disk store holds the rest).
+- Uploaded files without readable text are reported as skipped.
+
 ## 0.6.0 — 2026-09-24
 
 Semantic search: the first scorer that clearly beats keyword matching on the

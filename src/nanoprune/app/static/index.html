@@ -3,83 +3,150 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
   <title>NanoPrune — Recherche locale</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/app.css">
-  <script src="/app.js" defer></script>
+  <script src="/app.js"></script>
 </head>
 <body>
-  <div class="app-shell">
-    <header class="top-nav">
+  <div class="app">
+    <header class="topbar">
       <div class="brand">
-        <span>NanoPrune</span>
-        <span class="brand-tag" id="modelTag">…</span>
+        <svg class="brand-logo" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="m20 20-3.6-3.6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M8 11h6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        <span class="brand-name">NanoPrune</span>
+        <button type="button" class="engine-tag" id="engineTag" aria-controls="helpPanel" aria-expanded="false">…</button>
       </div>
-      <div class="nav-actions">
-        <button type="button" class="btn-import" id="btnImport" aria-expanded="false" aria-controls="importDrawer">
-          <span aria-hidden="true">📁</span>
-          <span>Changer de dossier…</span>
+      <div class="topbar-actions">
+        <button type="button" class="folder-btn" id="btnFolder" aria-expanded="false" aria-controls="importPanel">
+          <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+          <span class="folder-text">
+            <span class="folder-name" id="folderName">Choisir un dossier</span>
+            <span class="folder-stats" id="folderStats"></span>
+          </span>
         </button>
-        <span class="nav-status" id="statInfo">Chargement…</span>
+        <button type="button" class="icon-btn" id="btnTheme" aria-label="Basculer le thème clair ou sombre" title="Thème clair / sombre">
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="icon-btn" id="btnHelp" aria-label="Aide et raccourcis clavier" title="Aide et raccourcis (?)" aria-controls="helpPanel" aria-expanded="false">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5v.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17" r="1.2" fill="currentColor"/></svg>
+        </button>
       </div>
     </header>
 
-    <div id="modeBanner" class="mode-banner" role="status" hidden></div>
+    <div id="modeBanner" class="banner" role="note" hidden>
+      <strong>Mode mots-clés.</strong>
+      Aucun modèle sémantique n'est installé : seuls les passages contenant vos mots sont trouvés.
+      Pour trouver aussi les reformulations, lancez une fois
+      <code id="installCommand">nanoprune download --dense multilingual-e5-large</code>
+      <button type="button" class="link-btn" id="btnCopyInstall">copier</button>
+      (≈ 550 Mo), puis relancez l'application.
+    </div>
 
-    <section id="importDrawer" class="import-drawer" hidden>
-      <div class="drawer-title">
-        <span>Importer des dossiers ou des documents</span>
-        <button type="button" class="close-btn" id="btnCloseDrawer" aria-label="Fermer">✕</button>
+    <section id="helpPanel" class="panel help-panel" hidden aria-labelledby="helpTitle">
+      <div class="panel-head">
+        <h2 id="helpTitle">Aide</h2>
+        <button type="button" class="icon-btn" id="btnCloseHelp" aria-label="Fermer l'aide">✕</button>
+      </div>
+      <div class="help-grid">
+        <div>
+          <h3>Raccourcis clavier</h3>
+          <dl class="shortcuts">
+            <dt><kbd>/</kbd> ou <kbd>Ctrl</kbd>&nbsp;<kbd>K</kbd></dt><dd>Aller à la recherche</dd>
+            <dt><kbd>↓</kbd> <kbd>↑</kbd></dt><dd>Parcourir les résultats</dd>
+            <dt><kbd>Entrée</kbd></dt><dd>Afficher le passage complet</dd>
+            <dt><kbd>O</kbd></dt><dd>Ouvrir le fichier</dd>
+            <dt><kbd>C</kbd></dt><dd>Copier la citation</dd>
+            <dt><kbd>Échap</kbd></dt><dd>Effacer la recherche, fermer un panneau</dd>
+          </dl>
+        </div>
+        <div>
+          <h3>Comprendre les scores</h3>
+          <p id="scoreHelp"></p>
+          <p><strong>Filtre</strong> : <em>Large</em> montre les passages à partir de 30&nbsp;%, <em>Normal</em> à partir de 50&nbsp;%, <em>Strict</em> à partir de 70&nbsp;%.</p>
+          <h3>Confidentialité</h3>
+          <p>Le serveur n'écoute que sur cet ordinateur (127.0.0.1). Aucun document, aucune recherche n'est envoyé sur Internet.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="importPanel" class="panel import-panel" hidden aria-labelledby="importTitle">
+      <div class="panel-head">
+        <h2 id="importTitle">Choisir les documents à explorer</h2>
+        <button type="button" class="icon-btn" id="btnCloseImport" aria-label="Fermer">✕</button>
       </div>
 
-      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Choisir un dossier à importer">
-        <div class="dropzone-text">
-          Glissez-déposez un dossier ou des fichiers ici, ou <strong>cliquez pour choisir un dossier</strong>
-        </div>
-        <span class="hint" id="formatsHint"></span>
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-describedby="formatsHint">
+        <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <p class="dropzone-title"><strong>Glissez un dossier ici</strong> ou cliquez pour le choisir</p>
+        <p class="hint" id="formatsHint"></p>
       </div>
       <input id="folderInput" type="file" webkitdirectory multiple hidden>
       <input id="fileInput" type="file" multiple hidden>
 
-      <div class="picker-row">
-        <button type="button" class="btn-secondary" id="btnPickFiles">Choisir des fichiers…</button>
-        <span class="hint">Tout reste sur cet ordinateur : les fichiers sont lus par le serveur local.</span>
+      <div class="import-alt">
+        <button type="button" class="btn" id="btnPickFiles">Choisir des fichiers…</button>
+        <span class="hint">ou</span>
+        <form class="path-form" id="pathForm">
+          <label class="sr-only" for="pathInput">Chemin d'un dossier sur cet ordinateur</label>
+          <input id="pathInput" class="text-input mono" type="text" autocomplete="off" spellcheck="false"
+                 placeholder="Chemin d'un dossier, ex. ~/Documents/Dossiers">
+          <button type="submit" class="btn btn-primary">Indexer</button>
+        </form>
       </div>
-
-      <form class="path-row" id="pathForm">
-        <input id="pathInput" class="path-input" type="text" autocomplete="off"
-               placeholder="Ou un chemin local (ex : ~/Documents/Clients, sample_data/medical)">
-        <button type="submit" class="btn-load-path">Charger</button>
-      </form>
+      <p class="hint">Indiquer le chemin permet d'ouvrir les fichiers d'origine depuis les résultats. Tout reste sur cet ordinateur.</p>
 
       <div id="importReport" class="import-report" hidden></div>
     </section>
 
-    <section class="search-box">
-      <div class="search-input-wrapper">
-        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="q" class="search-input" type="search" autocomplete="off" autofocus
-               placeholder="Rechercher dans les documents (ex : allergie Dupont, clause de préavis…)"
-               aria-label="Recherche">
+    <section id="jobCard" class="panel job-card" hidden aria-live="polite">
+      <div class="job-head">
+        <span class="spinner" aria-hidden="true"></span>
+        <span class="job-title" id="jobTitle">Indexation…</span>
+        <button type="button" class="btn btn-ghost" id="btnCancel">Annuler</button>
       </div>
-      <div class="search-meta">
-        <div class="quick-filters">
-          <button type="button" class="filter-btn" data-query="Allergie pénicilline Dupont">Allergie Dupont</button>
-          <button type="button" class="filter-btn" data-query="Contre-indication AINS Kardegic">Contre-indication Martin</button>
-          <button type="button" class="filter-btn" data-query="Aucune allergie Sophie Bernard">Sans allergie Bernard</button>
+      <div class="progress" id="jobProgress" role="progressbar" aria-labelledby="jobTitle" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar" id="jobBar"></div>
+      </div>
+      <div class="job-detail" id="jobDetail"></div>
+    </section>
+
+    <section class="search" role="search">
+      <div class="search-field">
+        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="q" class="search-input" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Posez une question ou tapez des mots-clés…" aria-label="Rechercher dans les documents"
+               aria-describedby="summary">
+        <span class="spinner search-spinner" id="searchSpinner" aria-hidden="true" hidden></span>
+        <kbd class="kbd-hint" id="kbdHint" aria-hidden="true">/</kbd>
+      </div>
+      <div class="search-tools">
+        <div class="chips" id="suggestions" aria-label="Suggestions de recherche"></div>
+        <div class="segmented" role="radiogroup" aria-label="Filtre de pertinence" id="filter">
+          <span class="segmented-label" aria-hidden="true">Filtre</span>
+          <button type="button" role="radio" data-threshold="0.3" title="Montre aussi les passages moins sûrs (score ≥ 30 %)">Large</button>
+          <button type="button" role="radio" data-threshold="0.5" title="Score ≥ 50 %">Normal</button>
+          <button type="button" role="radio" data-threshold="0.7" title="Seulement les passages très pertinents (score ≥ 70 %)">Strict</button>
         </div>
-        <label class="threshold" for="threshold">
-          Seuil
-          <input id="threshold" type="range" min="0.20" max="0.95" step="0.05" value="0.45">
-          <output id="thresholdValue" for="threshold">0.45</output>
-        </label>
-        <div id="latencyTag" class="latency">-- ms</div>
       </div>
     </section>
 
-    <div id="results" class="results" aria-live="polite">
-      <div class="empty">Tape une requête pour chercher dans les documents indexés.</div>
+    <div id="summary" class="summary" aria-live="polite"></div>
+    <main id="results" class="results"></main>
+    <div class="more" id="moreRow" hidden>
+      <button type="button" class="btn" id="btnMore">Afficher plus de résultats</button>
     </div>
+
+    <footer class="footer">
+      <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      <span>100 % local : aucune donnée ne quitte cet ordinateur.</span>
+    </footer>
   </div>
+
+  <div id="dropOverlay" class="drop-overlay" hidden>
+    <div class="drop-overlay-box">Déposez les fichiers ou le dossier pour les indexer</div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 </body>
 </html>

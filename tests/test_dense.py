@@ -150,6 +150,76 @@ class TestSemanticScorer(unittest.TestCase):
         scores = [r["score"] for r in res["results"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
+    def test_progress_cancel_and_search_matrix(self):
+        from nanoprune.engine.indexer import LocalDocumentIndexer
+        from nanoprune.engine.search import LocalSearchEngine
+        from nanoprune.errors import OperationCancelled
+        scorer = self.scorer()
+        scorer.encoder.batch_size = 2
+        # Batches are sorted by length internally; rows come back in input order.
+        np.testing.assert_allclose(scorer.encoder.encode(CORPUS),
+                                   np.vstack([scorer.encoder.encode([t]) for t in CORPUS]), atol=1e-5)
+        calls = []
+        self.assertEqual(scorer.embed(CORPUS[:3], progress=lambda d, t: calls.append((d, t))).shape[0], 3)
+        self.assertEqual((calls[0], calls[-1]), ((0, 3), (3, 3)))
+        calls.clear()
+        scorer.embed(CORPUS, progress=lambda d, t: calls.append((d, t)))  # 3 cached, 2 to compute
+        self.assertEqual((calls[0], calls[-1]), ((3, 5), (5, 5)))
+        with self.assertRaises(OperationCancelled):
+            self.scorer().embed(CORPUS, should_stop=lambda: True)
+
+        scorer.calibrate("dev", save=False)
+        indexer = LocalDocumentIndexer()
+        for i, text in enumerate(CORPUS):
+            indexer.index_text(text, f"doc{i}.md")
+        engine = LocalSearchEngine(indexer=indexer, pruner=scorer)
+        engine.prepare()
+        expected = scorer.score("préavis", [c.text for c in indexer.chunks])
+        scorer.score = lambda *args, **kwargs: self.fail("search must reuse the passage embeddings")
+        res = engine.search("préavis", top_k=10, threshold=0.0)
+        self.assertEqual(sorted(r["score"] for r in res["results"]), sorted(round(x, 4) for x in expected))
+
+    def test_disk_store_survives_restarts_and_resumes(self):
+        from nanoprune.engine.dense import EmbeddingStore, SemanticScorer
+        from nanoprune.errors import OperationCancelled
+        with tempfile.TemporaryDirectory() as tmp:
+            store = EmbeddingStore(Path(tmp) / "e.sqlite3", fingerprint="v1")
+            first = SemanticScorer(self.model_dir, store=store)
+            expected = first.embed(CORPUS)
+            self.assertEqual(len(store), len(CORPUS))
+
+            # A new process (empty memory cache) reads the vectors back instead of recomputing them.
+            second = SemanticScorer(self.model_dir, store=EmbeddingStore(Path(tmp) / "e.sqlite3", fingerprint="v1"))
+            second.encoder.encode = lambda *args, **kwargs: self.fail("vectors should come from the disk store")
+            np.testing.assert_allclose(second.embed(CORPUS), expected, atol=1e-6)
+
+            # A different model (fingerprint) starts from an empty store.
+            self.assertEqual(len(EmbeddingStore(Path(tmp) / "e.sqlite3", fingerprint="v2")), 0)
+
+            # Vectors are saved as they are computed: a cancelled run keeps its progress.
+            third = SemanticScorer(self.model_dir, store=EmbeddingStore(Path(tmp) / "f.sqlite3", fingerprint="v1"))
+            third.persist_every = 2
+            third.encoder.batch_size = 2
+            calls = iter([False, True])
+            with self.assertRaises(OperationCancelled):
+                third.embed(CORPUS, should_stop=lambda: next(calls, True))
+            self.assertEqual(len(third.store), 2)
+
+            capped = EmbeddingStore(Path(tmp) / "g.sqlite3", fingerprint="v1", max_rows=3)
+            capped.put_many({text: vector for text, vector in zip(CORPUS, expected)})
+            self.assertEqual(len(capped), 3)
+
+    def test_load_with_disk_cache(self):
+        from nanoprune.engine.dense import SemanticScorer
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.dict(os.environ, {"XDG_CACHE_HOME": tmp}):
+            os.environ.pop("NANOPRUNE_DISK_CACHE", None)
+            scorer = SemanticScorer.load(self.model_dir, disk_cache=True)
+            self.assertTrue(str(scorer.store.path).startswith(str(Path(tmp) / "nanoprune" / "embeddings")))
+            self.assertEqual(scorer.describe()["disk_cache"], str(scorer.store.path))
+            self.assertIsNone(SemanticScorer.load(self.model_dir).store)
+            os.environ["NANOPRUNE_DISK_CACHE"] = "0"
+            self.assertIsNone(SemanticScorer.load(self.model_dir, disk_cache=True).store)
+
     def test_calibration_is_saved_and_cli_uses_it(self):
         from nanoprune.cli import main
         from nanoprune.engine.dense import read_dense_config
