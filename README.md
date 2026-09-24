@@ -169,7 +169,7 @@ Results at threshold 0.5, from `nanoprune eval` with the semantic model and the 
 | BM25 (ranking only) | — | 0.97 | — | 0.62 | — | — |
 | NanoPrune v0.3 (published) | 46.0 % | 0.52 | 43.0 % | 0.41 | 18/50 | 7/50 |
 | NanoPrune v0.4 (recorded, not published) | 60 % | — | not measured | — | — | — |
-| **Semantic: multilingual-e5-large int8** | 100 %* | 1.00* | **85.0 %** [80–90] | **0.93** | 25/50 | **45/50** |
+| **Semantic: multilingual-e5-large int8** | 100 %\* | 1.00\* | **85.0 %** [80–90] | **0.93** | 25/50 | **45/50** |
 
 \* calibrated on the dev suite, so its dev numbers are not a test result.
 
