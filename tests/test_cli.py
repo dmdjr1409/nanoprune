@@ -22,6 +22,7 @@ class TestCli(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         os.environ.pop("NANOPRUNE_MODEL", None)
+        os.environ.pop("NANOPRUNE_DENSE_MODEL", None)
         repo = mock.patch("nanoprune.core.weights._is_source_checkout", return_value=False)
         repo.start()
         self.addCleanup(repo.stop)

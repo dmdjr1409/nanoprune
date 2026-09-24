@@ -39,6 +39,31 @@ def compute_ece(
     }
 
 
+def fit_platt(scores, labels, l2: float = 1.0, iterations: int = 100) -> Tuple[float, float]:
+    """Platt scaling: (a, b) such that sigmoid(a * score + b) estimates P(relevant).
+
+    Fitted by L2-regularised logistic regression on standardised scores (Newton
+    steps), which stays finite even when the calibration set is separable.
+    """
+    x = np.asarray(scores, dtype=np.float64).flatten()
+    y = np.asarray(labels, dtype=np.float64).flatten()
+    if x.size == 0 or len(set(y.tolist())) < 2:
+        raise ValueError("Calibration needs both relevant and irrelevant examples")
+    mu, sd = float(x.mean()), float(x.std()) or 1.0
+    design = np.c_[(x - mu) / sd, np.ones_like(x)]
+    penalty = np.diag([l2, 0.0])
+    w = np.zeros(2)
+    for _ in range(iterations):
+        p = 1.0 / (1.0 + np.exp(-design @ w))
+        gradient = design.T @ (p - y) + penalty @ w
+        hessian = design.T @ (design * (p * (1.0 - p))[:, None]) + penalty
+        step = np.linalg.solve(hessian, gradient)
+        w -= step
+        if np.max(np.abs(step)) < 1e-10:
+            break
+    return float(w[0] / sd), float(w[1] - w[0] * mu / sd)
+
+
 def _nll(logits: np.ndarray, labels: np.ndarray, temperature: float) -> float:
     z = logits / temperature
     # log(1 + exp(-|z|)) formulation, stable for large |z|
