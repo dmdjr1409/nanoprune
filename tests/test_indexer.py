@@ -9,6 +9,7 @@ from nanoprune.engine.extractors import MissingDependencyError, extract_text_fro
 from nanoprune.engine.indexer import LocalDocumentIndexer
 from nanoprune.engine.pruner import NanoPruner
 from nanoprune.engine.search import LocalSearchEngine
+from nanoprune.errors import OperationCancelled
 
 SAMPLE_DIR = Path(__file__).parent.parent / "sample_data" / "medical"
 
@@ -89,6 +90,88 @@ class TestLocalIndexerAndSearch(unittest.TestCase):
         self.assertEqual(len(engine.search("bail commercial")["results"]), 1)
 
 
+class FixedScorer:
+    """Scores passages from a {substring: score} table (0 otherwise)."""
+
+    backend = "fixed"
+    has_model = True
+    threshold = 0.5
+
+    def __init__(self, table):
+        self.table = table
+
+    def score(self, query, candidates):
+        return [max([v for k, v in self.table.items() if k in text] or [0.0]) for text in candidates]
+
+
+class TestSearchResults(unittest.TestCase):
+    def engine(self, table, **kwargs):
+        indexer = LocalDocumentIndexer(chunk_size=120, chunk_overlap=60)
+        # One long paragraph (cut into overlapping passages) and two short ones.
+        indexer.index_text(
+            "Le bail commence en janvier. Le loyer est payable chaque mois. Le dépôt de garantie vaut deux mois. "
+            "Le locataire assure le logement. Le bailleur fait les grosses réparations. "
+            "Les charges sont réglées chaque trimestre. Le logement est rendu en bon état. "
+            "Les clés sont remises à la sortie des lieux.\n\n"
+            "Les animaux sont acceptés.\n\nLe préavis de départ est de trois mois.",
+            "bail.md",
+        )
+        return LocalSearchEngine(indexer=indexer, pruner=FixedScorer(table), **kwargs), indexer
+
+    def test_mostly_repeated_passages_are_not_shown_twice(self):
+        indexer = LocalDocumentIndexer(chunk_size=120, chunk_overlap=80)
+        indexer.index_text("Le bail commence en janvier pour trois ans. "
+                           "Le loyer est payable chaque mois avant le cinq du mois courant. "
+                           "Aucune pénalité de retard.", "bail.md")
+        first, second = indexer.chunks
+        self.assertEqual(second.metadata["shared_prev"], len("Le loyer est payable chaque mois avant le cinq du mois courant."))
+        engine = LocalSearchEngine(indexer=indexer, pruner=FixedScorer({first.body: 0.9, second.body: 0.8}))
+        self.assertEqual([r["chunk_id"] for r in engine.search("bail", threshold=0.5)["results"]], [first.chunk_id])
+
+    def test_passages_sharing_little_text_are_all_shown(self):
+        engine, indexer = self.engine({})
+        long_passages = [c for c in indexer.chunks if c.line_start == 1]
+        self.assertGreaterEqual(len(long_passages), 3)
+        self.assertTrue(all(c.metadata.get("shared_prev", 0) > 0 for c in long_passages[1:]))
+        engine.pruner.table = {c.body: 0.9 - 0.05 * i for i, c in enumerate(long_passages)}
+        res = engine.search("bail", top_k=10, threshold=0.5)
+        mostly_new = [c.chunk_id for c in long_passages if 2 * c.metadata.get("shared_prev", 0) < len(c.body)]
+        self.assertGreaterEqual(len(mostly_new), 3)
+        self.assertEqual([r["chunk_id"] for r in res["results"] if r["chunk_id"] in mostly_new], mostly_new)
+
+    def test_near_misses_and_counts(self):
+        engine, _ = self.engine({"préavis": 0.8, "animaux": 0.4, "janvier": 0.1})
+        res = engine.search("préavis", top_k=5, threshold=0.5)
+        self.assertEqual([r["rel_path"] for r in res["results"]], ["bail.md"])
+        self.assertEqual(res["matches_total"], 1)
+        self.assertFalse(res["more_available"])
+        # 0.4 is at least half the threshold, 0.1 is not.
+        self.assertEqual([r["score"] for r in res["near_misses"]], [0.4])
+
+        engine.pruner.table = {"préavis": 0.8, "animaux": 0.7}
+        res = engine.search("préavis", top_k=1, threshold=0.5)
+        self.assertEqual(res["matches_total"], 2)
+        self.assertTrue(res["more_available"])
+        self.assertEqual(res["near_misses"], [])
+
+    def test_highlight_terms_and_best_sentence(self):
+        engine = LocalSearchEngine(indexer=LocalDocumentIndexer(), pruner=NanoPruner(model_path=None))
+        engine.indexer.index_text("Dossier de M. Dupont.\nAllergies : pénicillines (sévère).", "dupont.md")
+        top = engine.search("allergie à la pénicilline", threshold=0.0)["results"][0]
+        self.assertEqual(top["highlight"], "Allergies : pénicillines (sévère).")
+        self.assertEqual(top["highlight_terms"], ["allergies", "pénicillines"])
+        # No shared word (a semantic match): the whole passage is quoted.
+        self.assertEqual(LocalSearchEngine._best_sentence({"xyz"}, "Titre\nPremière ligne."), "Titre\nPremière ligne.")
+        # A sentence matching only a common word does not stand for the passage.
+        idf = {"pas": 0.2, "antibio": 3.0}.get
+        text = "Pas de fièvre.\nAllergie aux pénicillines."
+        self.assertEqual(LocalSearchEngine._best_sentence({"pas", "antibio"}, text, idf), text)
+        # Query words found in no passage (weight 0) do not dilute the coverage.
+        self.assertEqual(LocalSearchEngine._best_sentence({"allergi", "inconnu"}, text, {"allergi": 1.0}.get),
+                         "Allergie aux pénicillines.")
+        self.assertEqual(LocalSearchEngine._best_sentence({"pas", "fievr"}, text), "Pas de fièvre.")
+
+
 class TestChunking(unittest.TestCase):
     def test_index_text_adds_chunks_with_line_numbers(self):
         indexer = LocalDocumentIndexer()
@@ -125,6 +208,19 @@ class TestChunking(unittest.TestCase):
             names = sorted({c.chunk_id.split("#")[0] for c in indexer.chunks})
             self.assertEqual(names, ["a.md", "sub/e.docx"])
             self.assertEqual(indexer.last_report["skipped"][0][1], "file too large")
+
+    def test_directory_progress_and_cancel(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for i in range(4):
+                (Path(tmp) / f"f{i}.txt").write_text(f"document {i}", encoding="utf-8")
+            calls = []
+            indexer = LocalDocumentIndexer()
+            indexer.index_directory(tmp, progress=lambda done, total: calls.append((done, total)))
+            self.assertEqual(calls, [(0, 4), (1, 4), (2, 4), (3, 4), (4, 4)])
+
+            stop_after = iter([False, False, False, False, False, True])
+            with self.assertRaises(OperationCancelled):
+                LocalDocumentIndexer().index_directory(tmp, should_stop=lambda: next(stop_after, True))
 
     def test_max_files(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -15,3 +15,7 @@ class HeadUnavailableError(RuntimeError):
 
 class TokenizerMismatchError(ValueError):
     """The tokenizer does not produce ids from the vocabulary the model was trained on."""
+
+
+class OperationCancelled(Exception):
+    """A long operation (indexing, embedding) was cancelled by the user."""
